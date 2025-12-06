@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>isitfluffy - Klövsjö Snöfall</title>
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 30px;
+        }
+
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+            margin-bottom: 10px;
+            font-size: 2.5em;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #7f8c8d;
+            margin-bottom: 30px;
+            font-size: 1.1em;
+        }
+
+        .chart-container {
+            margin-bottom: 40px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+        }
+
+        .chart-title {
+            font-size: 1.5em;
+            color: #2c3e50;
+            margin-bottom: 15px;
+            font-weight: 600;
+        }
+
+        .chart {
+            width: 100%;
+            height: 400px;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #7f8c8d;
+            font-size: 1.2em;
+        }
+
+        .error {
+            background: #fee;
+            color: #c33;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+
+        @media (max-width: 768px) {
+            body {
+                padding: 10px;
+            }
+
+            .container {
+                padding: 15px;
+                border-radius: 15px;
+            }
+
+            h1 {
+                font-size: 1.8em;
+            }
+
+            .subtitle {
+                font-size: 1em;
+            }
+
+            .chart {
+                height: 300px;
+                touch-action: none; /* Prevent browser touch behaviors */
+                -webkit-touch-callout: none; /* Disable callouts on iOS */
+                -webkit-user-select: none; /* Disable text selection */
+                user-select: none;
+            }
+
+            .chart-title {
+                font-size: 1.2em;
+            }
+        }
+
+        /* Extra small screens */
+        @media (max-width: 480px) {
+            body {
+                padding: 5px;
+            }
+
+            .container {
+                padding: 10px;
+            }
+
+            h1 {
+                font-size: 1.5em;
+            }
+
+            .chart {
+                height: 250px;
+            }
+
+            .chart-container {
+                padding: 15px;
+            }
+        }
+
+        /* Touch device optimizations */
+        @media (hover: none) and (pointer: coarse) {
+            .chart {
+                /* Ensure tooltips are visible on touch */
+                cursor: pointer;
+            }
+
+            /* Improve tap targets */
+            .chart-container {
+                margin-bottom: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>❄️ isitfluffy</h1>
+        <p class="subtitle">Snöfall i Klövsjö</p>
+        
+        <div class="chart-container">
+            <div class="chart-title">Dagligt snöfall (8:00 - 8:00)</div>
+            <div id="dailyChart" class="chart">
+                <div class="loading">Laddar data...</div>
+            </div>
+        </div>
+
+        <div class="chart-container">
+            <div class="chart-title">Senaste 24 timmarna</div>
+            <div id="hourlyChart" class="chart">
+                <div class="loading">Laddar data...</div>
+            </div>
+        </div>
+    </div>
+
+    <script src="smhi_api.js"></script>
+    <script src="snowfall.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
+

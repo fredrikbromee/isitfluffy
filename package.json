@@ -1,0 +1,22 @@
+{
+  "name": "isitfluffy",
+  "version": "1.0.0",
+  "description": "Klövsjö ski resort snowfall tracker",
+  "main": "fetch_data.js",
+  "scripts": {
+    "fetch": "node fetch_data.js"
+  },
+  "keywords": [
+    "snowfall",
+    "weather",
+    "smhi"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "node-fetch": "^2.7.0"
+  }
+}
+
+
+

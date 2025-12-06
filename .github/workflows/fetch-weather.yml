@@ -1,0 +1,38 @@
+name: Fetch Weather Data
+
+on:
+  schedule:
+    # Run daily at 8:15 AM CET (7:15 AM UTC in winter/CET, 6:15 AM UTC in summer/CEST)
+    # This captures the previous day's data (8 AM CET - 8 AM CET)
+    - cron: '15 7 * * *'
+  workflow_dispatch: # Allow manual triggering
+
+jobs:
+  fetch-data:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm install
+      
+      - name: Run data fetch script
+        run: node fetch_data.js
+      
+      - name: Commit and push changes
+        run: |
+          git config --local user.email "actions@github.com"
+          git config --local user.name "GitHub Actions"
+          git add data/*.csv
+          git diff --staged --quiet || (git commit -m "Update weather data [skip ci]" && git push)
+
