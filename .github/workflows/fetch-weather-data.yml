@@ -1,0 +1,51 @@
+name: Fetch Weather Data
+
+on:
+  schedule:
+    # Run daily at 8:15 AM UTC (9:15 AM CET / 10:15 AM CEST)
+    - cron: '15 8 * * *'
+  workflow_dispatch: # Allow manual triggering
+
+jobs:
+  fetch-data:
+    runs-on: ubuntu-latest
+    
+    permissions:
+      contents: write # Required to commit and push changes
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Fetch weather data
+        run: npm run fetch
+      
+      - name: Check for changes
+        id: verify-changed-files
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+          else
+            echo "changed=false" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Commit and push changes
+        if: steps.verify-changed-files.outputs.changed == 'true'
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add data/*.csv
+          git commit -m "Update weather data - $(date +'%Y-%m-%d %H:%M:%S UTC')"
+          git push
+
