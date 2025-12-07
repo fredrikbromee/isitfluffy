@@ -245,21 +245,53 @@ function getHourInCET(date) {
  * Calculate today's value from hourly data (since 8 AM CET)
  */
 function calculateTodayFromHourly(hourlyData) {
+  if (!hourlyData || hourlyData.length === 0) {
+    return null;
+  }
+  
+  // Get current time and convert to CET timezone
   const now = new Date();
   const todayCET = getDateKeyInCET(now);
   const currentHourCET = getHourInCET(now);
   
-  // Filter hourly data to only include hours from 8 AM today onwards
+  // Filter hourly data to only include hours from 8 AM today onwards (in CET)
+  // Ensure we properly handle the timestamp - it might be a Date object or ISO string
   const todayHours = hourlyData.filter(hour => {
-    const hourDate = new Date(hour.timestamp);
+    if (!hour || !hour.timestamp) {
+      return false;
+    }
+    
+    // Ensure we have a proper Date object
+    let hourDate;
+    if (hour.timestamp instanceof Date) {
+      hourDate = hour.timestamp;
+    } else if (typeof hour.timestamp === 'string') {
+      hourDate = new Date(hour.timestamp);
+    } else {
+      return false;
+    }
+    
+    // Check if the date is valid
+    if (isNaN(hourDate.getTime())) {
+      return false;
+    }
+    
+    // Convert to CET timezone for comparison
     const hourDateCET = getDateKeyInCET(hourDate);
     const hourHourCET = getHourInCET(hourDate);
     
-    // Include if it's today and hour is >= 8
-    return hourDateCET === todayCET && hourHourCET >= 8;
+    // Include if it's today (in CET) and hour is >= 8 (in CET)
+    const isToday = hourDateCET === todayCET;
+    const isAfter8 = hourHourCET >= 8;
+    
+    return isToday && isAfter8;
   });
   
   if (todayHours.length === 0) {
+    console.log('No hours found for today since 8 AM. Today CET:', todayCET, 'Current hour CET:', currentHourCET, 'Hourly data range:', {
+      first: hourlyData[0] ? getDateKeyInCET(new Date(hourlyData[0].timestamp)) + ' ' + getHourInCET(new Date(hourlyData[0].timestamp)) : 'N/A',
+      last: hourlyData[hourlyData.length - 1] ? getDateKeyInCET(new Date(hourlyData[hourlyData.length - 1].timestamp)) + ' ' + getHourInCET(new Date(hourlyData[hourlyData.length - 1].timestamp)) : 'N/A'
+    });
     return null;
   }
   
@@ -311,23 +343,34 @@ function renderDailyChart(data, hourlyData = null) {
   
   // Replace today's value with calculated value from hourly data if available
   if (hourlyData && hourlyData.length > 0) {
-    const todayValue = calculateTodayFromHourly(hourlyData);
-    if (todayValue) {
-      const todayCET = getDateKeyInCET(new Date());
-      
-      // Find today's index in the daily data
-      const todayIndex = data.findIndex(row => {
-        const rowDate = new Date(row.date);
-        const rowDateCET = getDateKeyInCET(rowDate);
-        return rowDateCET === todayCET;
-      });
-      
-      if (todayIndex !== -1) {
-        // Replace today's values
-        snowfall[todayIndex] = todayValue.snowfall;
-        slrValues[todayIndex] = todayValue.slr;
+    try {
+      const todayValue = calculateTodayFromHourly(hourlyData);
+      if (todayValue) {
+        const todayCET = getDateKeyInCET(new Date());
+        
+        // Find today's index in the daily data
+        const todayIndex = data.findIndex(row => {
+          const rowDate = new Date(row.date);
+          const rowDateCET = getDateKeyInCET(rowDate);
+          return rowDateCET === todayCET;
+        });
+        
+        if (todayIndex !== -1) {
+          // Replace today's values
+          snowfall[todayIndex] = todayValue.snowfall;
+          slrValues[todayIndex] = todayValue.slr;
+          console.log(`Updated today's value: ${todayValue.snowfall.toFixed(1)} cm, SLR: ${todayValue.slr.toFixed(1)}`);
+        } else {
+          console.warn('Today not found in daily data. Today CET:', todayCET, 'Available dates:', data.slice(-5).map(r => getDateKeyInCET(new Date(r.date))));
+        }
+      } else {
+        console.warn('No hourly data found for today since 8 AM');
       }
+    } catch (error) {
+      console.error('Error calculating today from hourly data:', error);
     }
+  } else {
+    console.warn('Hourly data not available for today calculation');
   }
   
   const colors = slrValues.map(slr => getSnowColor(slr));
