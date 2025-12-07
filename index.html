@@ -62,6 +62,53 @@
             height: 400px;
         }
 
+        .legend-section {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+
+        .legend-title {
+            font-weight: 600;
+            margin-bottom: 10px;
+            color: #2c3e50;
+        }
+
+        .gradient-bar {
+            height: 15px;
+            /* Purple to dark blue to icy white-blue gradient - purple = wetter, lighter = drier */
+            background: linear-gradient(90deg, 
+                rgb(120, 60, 140) 0%,     /* Purple - very wet/heavy snow */
+                rgb(30, 60, 120) 20%,     /* Dark blue - wet/heavy snow */
+                rgb(70, 130, 180) 40%,    /* Medium blue */
+                rgb(135, 206, 250) 70%,   /* Light blue */
+                rgb(245, 252, 255) 100%   /* Very white/icy - dry/fluffy snow */
+            );
+            border-radius: 8px;
+            margin-bottom: 5px;
+        }
+
+        .legend-labels {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.75em;
+            color: #666;
+            margin-top: 5px;
+        }
+
+        .legend-labels span {
+            text-align: center;
+            flex: 1;
+        }
+
+        .legend-description {
+            font-size: 0.9em;
+            color: #7f8c8d;
+            margin-top: 10px;
+            line-height: 1.4;
+        }
+
         .loading {
             text-align: center;
             padding: 40px;
@@ -163,6 +210,24 @@
                 <div class="loading">Laddar data...</div>
             </div>
         </div>
+
+        <div class="legend-section">
+            <div class="legend-title">Snökvalitet</div>
+            <div class="gradient-bar"></div>
+            <div class="legend-labels">
+                <span>Slask</span>
+                <span>Blötsnö</span>
+                <span>Kramsnö</span>
+                <span>Nysnö</span>
+                <span>Torrsnö</span>
+                <span>Lätt puder</span>
+                <span>Champagnepuder</span>
+                <span>JAPOW!</span>
+            </div>
+            <p class="legend-description">
+                Färgerna visar snöns densitet. Från tung blötsnö (lila) via mörkblå och ljusblå till det lättaste "Champagne powder" och "JAPOW" (isblått/vitt).
+            </p>
+        </div>
     </div>
 
     <script src="smhi_api.js"></script>
@@ -170,4 +235,3 @@
     <script src="app.js"></script>
 </body>
 </html>
-

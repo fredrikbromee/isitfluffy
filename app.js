@@ -2,6 +2,57 @@
 // Note: In browser, smhi_api.js must be loaded before app.js
 
 /**
+ * Interpolate between two colors with exponential curve for more dramatic transitions
+ * @param {number} value - Current value
+ * @param {number} min - Range minimum
+ * @param {number} max - Range maximum
+ * @param {Array} color1 - Start color [r, g, b]
+ * @param {Array} color2 - End color [r, g, b]
+ * @param {number} curve - Curve factor (1 = linear, >1 = more dramatic)
+ */
+function interpolateColor(value, min, max, color1, color2, curve = 1.5) {
+  let factor = Math.max(0, Math.min(1, (value - min) / (max - min)));
+  // Apply exponential curve for more dramatic transitions
+  factor = Math.pow(factor, 1 / curve);
+  const r = Math.round(color1[0] + factor * (color2[0] - color1[0]));
+  const g = Math.round(color1[1] + factor * (color2[1] - color1[1]));
+  const b = Math.round(color1[2] + factor * (color2[2] - color1[2]));
+  return `rgb(${r}, ${g}, ${b})`;
+}
+
+/**
+ * Get color based on snow fluffiness (SLR)
+ * Gradient: Purple (wet/heavy snow) -> Dark blue -> Icy white-blue (dry/fluffy snow)
+ * Purple tones for wet snow, transitioning to blue as snow gets drier
+ */
+function getSnowColor(slr) {
+  // Define color points - purple to dark blue to icy white-blue
+  const cPurple = [120, 60, 140];       // Purple for very wet/heavy snow (low SLR)
+  const cDarkBlue = [30, 60, 120];      // Dark blue for wet/heavy snow
+  const cMediumBlue = [70, 130, 180];   // Medium blue
+  const cLightBlue = [135, 206, 250];   // Light blue (sky blue)
+  const cIceBlue = [245, 252, 255];     // Very white/icy for dry/fluffy snow (high SLR) - even whiter
+
+  if (slr < 5) return `rgb(${cPurple.join(',')})`; // Very wet/heavy - purple
+  if (slr >= 30) return `rgb(${cIceBlue.join(',')})`; // Extremely dry/fluffy
+
+  // Smooth gradient from purple through blue to icy white-blue
+  if (slr < 8) {
+    // 5-8: Purple -> Dark blue
+    return interpolateColor(slr, 5, 8, cPurple, cDarkBlue, 1.2);
+  } else if (slr < 12) {
+    // 8-12: Dark blue -> Medium blue
+    return interpolateColor(slr, 8, 12, cDarkBlue, cMediumBlue, 1.2);
+  } else if (slr < 22) {
+    // 12-22: Medium blue -> Light blue
+    return interpolateColor(slr, 12, 22, cMediumBlue, cLightBlue, 1.2);
+  } else {
+    // 22-30: Light blue -> Icy white-blue
+    return interpolateColor(slr, 22, 30, cLightBlue, cIceBlue, 1.5);
+  }
+}
+
+/**
  * Parse CSV string to array of objects
  */
 function parseCSV(csvText) {
@@ -65,6 +116,7 @@ async function fetchSMHIDataBrowser(parameter, stationId, period = 'latest-day')
 
 /**
  * Fetch last 24 hours of hourly data
+ * Shows the last 24 hours for which we have data, not a fixed window from now
  */
 async function fetchLast24Hours() {
   try {
@@ -81,10 +133,9 @@ async function fetchLast24Hours() {
     
     const results = await Promise.all(parameterPromises);
     
-    // Organize data by timestamp
+    // Organize data by timestamp and find the most recent hour with data
     const dataByTime = {};
-    const now = new Date();
-    const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    let latestHourWithData = null;
     
     for (const { key, data } of results) {
       if (data && data.value && Array.isArray(data.value)) {
@@ -95,36 +146,70 @@ async function fetchLast24Hours() {
             continue;
           }
           
-          // Only include last 24 hours
-          if (parsed.timestamp >= oneDayAgo) {
-            const timeKey = parsed.timestamp.toISOString();
-            if (!dataByTime[timeKey]) {
-              dataByTime[timeKey] = { timestamp: parsed.timestamp };
-            }
-            dataByTime[timeKey][key] = parsed.value;
+          // Round to nearest hour for consistent grouping
+          const hourTimestamp = new Date(parsed.timestamp);
+          hourTimestamp.setMinutes(0, 0, 0);
+          const timeKey = hourTimestamp.toISOString();
+          
+          if (!dataByTime[timeKey]) {
+            dataByTime[timeKey] = { timestamp: hourTimestamp };
+          }
+          dataByTime[timeKey][key] = parsed.value;
+          
+          // Track the latest hour that has at least temperature data
+          if (key === 'temperature' && (!latestHourWithData || hourTimestamp > latestHourWithData)) {
+            latestHourWithData = hourTimestamp;
           }
         }
       }
     }
     
-    // Convert to array and sort by timestamp
-    const hourlyData = Object.values(dataByTime)
-      .filter(data => data.temperature !== undefined && data.precipitation !== undefined)
-      .sort((a, b) => a.timestamp - b.timestamp);
+    // If we found data, use the latest hour as the end point
+    // Otherwise, fall back to current time
+    const endTime = latestHourWithData || new Date();
+    endTime.setMinutes(0, 0, 0);
+    
+    // Create complete 24-hour array ending at the latest hour with data
+    const hourlyData = [];
+    const startTime = new Date(endTime);
+    startTime.setHours(startTime.getHours() - 23); // Start 23 hours before to get 24 hours total
+    
+    for (let i = 0; i < 24; i++) {
+      const hourTime = new Date(startTime);
+      hourTime.setHours(startTime.getHours() + i);
+      const timeKey = hourTime.toISOString();
+      
+      const data = dataByTime[timeKey];
+      if (data && data.temperature !== undefined) {
+        // We have data for this hour, use it (precipitation might be 0 or undefined)
+        const precipitation = data.precipitation !== undefined ? data.precipitation : 0;
+        const snowCalc = calculateSnowfall(
+          data.temperature,
+          precipitation,
+          data.wind_speed || 0,
+          data.humidity || 90
+        );
+        
+        hourlyData.push({
+          timestamp: hourTime,
+          temperature: data.temperature,
+          precipitation: precipitation,
+          snowfall: snowCalc.amount,
+          slr: snowCalc.slr
+        });
+      } else {
+        // Missing hour - fill with zero values
+        hourlyData.push({
+          timestamp: hourTime,
+          temperature: null,
+          precipitation: 0,
+          snowfall: 0,
+          slr: 0
+        });
+      }
+    }
 
-    // SMHI API returns hourly precipitation values directly (not cumulative)
-    // Calculate snowfall for each hour
-    return hourlyData.map(data => ({
-      timestamp: data.timestamp,
-      temperature: data.temperature,
-      precipitation: data.precipitation,
-      snowfall: calculateSnowfall(
-        data.temperature,
-        data.precipitation,
-        data.wind_speed || 0,  // Default to 0 if missing
-        data.humidity || 90     // Default to 90% if missing
-      )
-    }));
+    return hourlyData;
   } catch (error) {
     console.error('Error fetching last 24 hours:', error);
     throw error;
@@ -146,6 +231,8 @@ function isMobileDevice() {
 function renderDailyChart(data) {
   const dates = data.map(row => row.date);
   const snowfall = data.map(row => parseFloat(row.snowfall_cm) || 0);
+  const slrValues = data.map(row => parseFloat(row.slr) || 0);
+  const colors = slrValues.map(slr => getSnowColor(slr));
 
   const isMobile = isMobileDevice();
 
@@ -154,14 +241,17 @@ function renderDailyChart(data) {
     y: snowfall,
     type: 'bar',
     marker: {
-      color: '#3498db',
+      color: colors,
       line: {
-        color: '#2980b9',
+        color: colors.map(c => c.replace('rgb', 'rgba').replace(')', ', 0.8)')), // Slightly darker/alpha border
         width: 1
       }
     },
     name: 'Snöfall (cm)',
-    hovertemplate: isMobile ? '%{y:.1f} cm<br>%{x}<extra></extra>' : undefined
+    customdata: slrValues.map(slr => slr.toFixed(1)), // SLR values for tooltip only
+    hovertemplate: isMobile 
+      ? '%{y:.1f} cm<br>%{x}<extra></extra>' 
+      : 'Snöfall: %{y:.1f} cm<br>%{x}<br>Fluffighet (SLR): %{customdata}<extra></extra>'
   };
 
   const layout = {
@@ -170,7 +260,6 @@ function renderDailyChart(data) {
       font: { size: 16 }
     },
     xaxis: {
-      title: 'Datum',
       type: 'date'
     },
     yaxis: {
@@ -179,7 +268,7 @@ function renderDailyChart(data) {
     margin: { l: 60, r: 20, t: 20, b: 60 },
     responsive: true,
     displayModeBar: false,
-    hovermode: isMobile ? 'closest' : 'x unified',
+    hovermode: isMobile ? 'closest' : 'closest', // Changed to closest for better tooltip control with colored bars
     dragmode: isMobile ? false : 'zoom'
   };
 
@@ -233,6 +322,7 @@ function renderHourlyChart(data) {
     return `kl ${hour}`;
   });
   const snowfall = data.map(d => d.snowfall);
+  const colors = data.map(d => getSnowColor(d.slr));
 
   // Calculate total accumulated snowfall
   const totalSnowfall = data.reduce((sum, d) => sum + d.snowfall, 0);
@@ -248,14 +338,17 @@ function renderHourlyChart(data) {
     y: snowfall,
     type: 'bar',
     marker: {
-      color: '#e74c3c',
+      color: colors,
       line: {
-        color: '#c0392b',
+        color: colors.map(c => c.replace('rgb', 'rgba').replace(')', ', 0.8)')), // Slightly darker/alpha border
         width: 1
       }
     },
     name: 'Snöfall (cm)',
-    hovertemplate: isMobile ? '%{y:.1f} cm<br>%{x}<extra></extra>' : undefined
+    customdata: data.map(d => d.slr.toFixed(1)), // SLR values for tooltip only
+    hovertemplate: isMobile 
+      ? '%{y:.1f} cm<br>%{x}<extra></extra>' 
+      : 'Snöfall: %{y:.1f} cm<br>%{x}<br>Fluffighet (SLR): %{customdata}<extra></extra>'
   };
 
   const layout = {
@@ -264,7 +357,6 @@ function renderHourlyChart(data) {
       font: { size: 16 }
     },
     xaxis: {
-      title: 'Tid',
       tickangle: -45
     },
     yaxis: {
@@ -273,7 +365,7 @@ function renderHourlyChart(data) {
     margin: { l: 60, r: 20, t: 20, b: 80 },
     responsive: true,
     displayModeBar: false,
-    hovermode: isMobile ? 'closest' : 'x unified',
+    hovermode: isMobile ? 'closest' : 'closest', // Changed to closest for better tooltip control with colored bars
     dragmode: isMobile ? false : 'zoom'
   };
 
@@ -358,4 +450,3 @@ if (document.readyState === 'loading') {
 } else {
   init();
 }
-

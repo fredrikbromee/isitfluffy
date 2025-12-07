@@ -10,18 +10,18 @@
  * @param {number} temp - Temperatur i °C
  * @param {number} wind - Vind i m/s
  * @param {number} hum - Luftfuktighet i % (0-100)
- * @returns {number} Snödjup i cm
+ * @returns {Object} Objekt med snödjup (amount) och fluffighetsfaktor (slr)
  */
 const calculateSnowfall = (temp, mm, wind, hum = 90) => {
   // Fail fast: Ingen nederbörd
-  if (!mm || mm <= 0) return 0;
+  if (!mm || mm <= 0) return { amount: 0, slr: 0 };
 
   // 1. Wet Bulb Approximation (Kritisk för gränslandet regn/snö)
   // I torr luft (låg hum) kan det snöa även vid plusgrader.
   const wetBulb = temp - ((100 - hum) / 10);
 
   // Fail fast: För varmt för snö (även med wet bulb-effekt)
-  if (wetBulb > 1.0) return 0;
+  if (wetBulb > 1.0) return { amount: 0, slr: 0 };
 
   // 2. Beräkna Base SLR (Snow-to-Liquid Ratio)
   // Interpolerar mellan tung blötsnö och fluffig dendrit-snö
@@ -40,12 +40,15 @@ const calculateSnowfall = (temp, mm, wind, hum = 90) => {
     : Math.exp(-0.08 * (wind - 2.5));
 
   // 4. Resultat: mm * ratio * vind / 10 (för att få cm)
-  // Använder toFixed(2) för snyggare output, konvertera tillbaka till Number
-  return Number(((mm * slr * windFactor) / 10).toFixed(2));
+  const amount = Number(((mm * slr * windFactor) / 10).toFixed(2));
+  
+  return {
+    amount,
+    slr: Number(slr.toFixed(1))
+  };
 };
 
 // Export for Node.js
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = { calculateSnowfall };
 }
-

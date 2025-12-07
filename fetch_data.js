@@ -270,12 +270,15 @@ function calculateDailySnowfall() {
     }
     
     if (!dailyTotals[dayKey]) {
-      dailyTotals[dayKey] = 0;
+      dailyTotals[dayKey] = { total: 0, weightedSlr: 0, totalAmount: 0 };
     }
     
-    const snowfall = calculateSnowfall(temperature, precipitation, wind, hum);
-    if (!isNaN(snowfall)) {
-      dailyTotals[dayKey] += snowfall;
+    const snowCalc = calculateSnowfall(temperature, precipitation, wind, hum);
+    if (!isNaN(snowCalc.amount) && snowCalc.amount > 0) {
+      dailyTotals[dayKey].total += snowCalc.amount;
+      // Weighted average SLR (weighted by snowfall amount)
+      dailyTotals[dayKey].weightedSlr += snowCalc.slr * snowCalc.amount;
+      dailyTotals[dayKey].totalAmount += snowCalc.amount;
     }
   }
   
@@ -292,10 +295,14 @@ function calculateDailySnowfall() {
     }
   }
   
-  // Write updated daily totals
-  const header = 'date,snowfall_cm\n';
+  // Write updated daily totals with SLR
+  const header = 'date,snowfall_cm,slr\n';
   const allDays = Object.keys(dailyTotals).sort();
-  const dailyLines = allDays.map(date => `${date},${dailyTotals[date].toFixed(2)}`);
+  const dailyLines = allDays.map(date => {
+    const day = dailyTotals[date];
+    const avgSlr = day.totalAmount > 0 ? (day.weightedSlr / day.totalAmount).toFixed(1) : '0';
+    return `${date},${day.total.toFixed(2)},${avgSlr}`;
+  });
   
   fs.writeFileSync(SNOWFALL_DAILY_FILE, header + dailyLines.join('\n') + '\n');
   console.log(`Updated daily snowfall totals for ${allDays.length} days`);
@@ -316,7 +323,7 @@ async function bootstrapHistoricalData(startDate = '2025-10-01') {
       fs.writeFileSync(WEATHER_DATA_FILE, header);
     }
     if (fs.existsSync(SNOWFALL_DAILY_FILE)) {
-      const header = 'date,snowfall_cm\n';
+      const header = 'date,snowfall_cm,slr\n';
       fs.writeFileSync(SNOWFALL_DAILY_FILE, header);
     }
     
