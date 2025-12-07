@@ -208,6 +208,15 @@ function destroyChart(instance) {
 }
 
 /**
+ * Get Swedish month abbreviation
+ */
+function getSwedishMonthAbbr(date) {
+  const monthNames = ['jan', 'feb', 'mar', 'apr', 'maj', 'jun', 
+                      'jul', 'aug', 'sep', 'okt', 'nov', 'dec'];
+  return monthNames[date.getMonth()];
+}
+
+/**
  * Render daily snowfall chart using Chart.js
  */
 function renderDailyChart(data) {
@@ -215,7 +224,27 @@ function renderDailyChart(data) {
 
   const ctx = document.getElementById('dailyChart').getContext('2d');
   
-  const labels = data.map(row => row.date);
+  // Group data by month and find middle index for each month
+  const monthGroups = {};
+  data.forEach((row, index) => {
+    const date = new Date(row.date);
+    const monthKey = `${date.getFullYear()}-${date.getMonth()}`;
+    if (!monthGroups[monthKey]) {
+      monthGroups[monthKey] = { indices: [], monthAbbr: getSwedishMonthAbbr(date) };
+    }
+    monthGroups[monthKey].indices.push(index);
+  });
+  
+  // Create labels array - only show month abbreviation at middle of each month
+  const labels = new Array(data.length).fill('');
+  Object.values(monthGroups).forEach(group => {
+    if (group.indices.length > 0) {
+      const middleIndex = group.indices[Math.floor(group.indices.length / 2)];
+      labels[middleIndex] = group.monthAbbr;
+    }
+  });
+  
+  const fullDates = data.map(row => row.date); // Keep for tooltips
   const snowfall = data.map(row => parseFloat(row.snowfall_cm) || 0);
   const slrValues = data.map(row => parseFloat(row.slr) || 0);
   const colors = slrValues.map(slr => getSnowColor(slr));
@@ -247,8 +276,8 @@ function renderDailyChart(data) {
                 intersect: false,
                 callbacks: {
                     title: (context) => {
-                        // Visa datum
-                        return context[0].label;
+                        // Visa fullt datum i tooltip
+                        return fullDates[context[0].dataIndex];
                     },
                     label: (context) => {
                         const cm = context.parsed.y.toFixed(1);
@@ -272,12 +301,11 @@ function renderDailyChart(data) {
                 title: {
                     display: false
                 },
-                // Minska antalet etiketter på mobil för läsbarhet
+                // Show labels (empty strings will be automatically skipped by Chart.js)
                 ticks: {
-                    maxRotation: 45,
-                    minRotation: 45,
-                    autoSkip: true,
-                    maxTicksLimit: window.innerWidth < 768 ? 7 : 15 // Färre etiketter på liten skärm
+                    maxRotation: 0, // Month abbreviations are short, no rotation needed
+                    minRotation: 0,
+                    autoSkip: false // Don't auto-skip - we control which labels to show
                 },
                 grid: {
                     display: false
