@@ -217,9 +217,70 @@ function getSwedishMonthAbbr(date) {
 }
 
 /**
+ * Get date string in CET timezone for day grouping
+ */
+function getDateKeyInCET(date) {
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Europe/Stockholm',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  });
+  return formatter.format(date);
+}
+
+/**
+ * Get hour in CET timezone
+ */
+function getHourInCET(date) {
+  const formatter = new Intl.DateTimeFormat('en', {
+    timeZone: 'Europe/Stockholm',
+    hour: 'numeric',
+    hourCycle: 'h23'
+  });
+  return parseInt(formatter.format(date));
+}
+
+/**
+ * Calculate today's value from hourly data (since 8 AM CET)
+ */
+function calculateTodayFromHourly(hourlyData) {
+  const now = new Date();
+  const todayCET = getDateKeyInCET(now);
+  const currentHourCET = getHourInCET(now);
+  
+  // Filter hourly data to only include hours from 8 AM today onwards
+  const todayHours = hourlyData.filter(hour => {
+    const hourDate = new Date(hour.timestamp);
+    const hourDateCET = getDateKeyInCET(hourDate);
+    const hourHourCET = getHourInCET(hourDate);
+    
+    // Include if it's today and hour is >= 8
+    return hourDateCET === todayCET && hourHourCET >= 8;
+  });
+  
+  if (todayHours.length === 0) {
+    return null;
+  }
+  
+  // Sum snowfall amounts
+  const totalSnowfall = todayHours.reduce((sum, hour) => sum + (hour.snowfall || 0), 0);
+  
+  // Average SLR (only for hours with snowfall > 0)
+  const hoursWithSnow = todayHours.filter(hour => hour.snowfall > 0);
+  if (hoursWithSnow.length === 0) {
+    return { snowfall: totalSnowfall, slr: 0 };
+  }
+  
+  const avgSlr = hoursWithSnow.reduce((sum, hour) => sum + (hour.slr || 0), 0) / hoursWithSnow.length;
+  
+  return { snowfall: totalSnowfall, slr: avgSlr };
+}
+
+/**
  * Render daily snowfall chart using Chart.js
  */
-function renderDailyChart(data) {
+function renderDailyChart(data, hourlyData = null) {
   destroyChart(dailyChartInstance);
 
   const ctx = document.getElementById('dailyChart').getContext('2d');
@@ -245,8 +306,30 @@ function renderDailyChart(data) {
   });
   
   const fullDates = data.map(row => row.date); // Keep for tooltips
-  const snowfall = data.map(row => parseFloat(row.snowfall_cm) || 0);
-  const slrValues = data.map(row => parseFloat(row.slr) || 0);
+  let snowfall = data.map(row => parseFloat(row.snowfall_cm) || 0);
+  let slrValues = data.map(row => parseFloat(row.slr) || 0);
+  
+  // Replace today's value with calculated value from hourly data if available
+  if (hourlyData && hourlyData.length > 0) {
+    const todayValue = calculateTodayFromHourly(hourlyData);
+    if (todayValue) {
+      const todayCET = getDateKeyInCET(new Date());
+      
+      // Find today's index in the daily data
+      const todayIndex = data.findIndex(row => {
+        const rowDate = new Date(row.date);
+        const rowDateCET = getDateKeyInCET(rowDate);
+        return rowDateCET === todayCET;
+      });
+      
+      if (todayIndex !== -1) {
+        // Replace today's values
+        snowfall[todayIndex] = todayValue.snowfall;
+        slrValues[todayIndex] = todayValue.slr;
+      }
+    }
+  }
+  
   const colors = slrValues.map(slr => getSnowColor(slr));
 
   dailyChartInstance = new Chart(ctx, {
@@ -456,21 +539,10 @@ function showError(elementId, message) {
 async function init() {
   // Låt loading meddelandet visas i chart-container till data laddats
   
-  // Load daily chart
+  // Load hourly chart first (needed for today's calculation)
+  let hourlyData = null;
   try {
-    const dailyData = await fetchDailySnowfall();
-    if (dailyData.length > 0) {
-      renderDailyChart(dailyData);
-    } else {
-      showError('dailyChart', 'Ingen daglig data tillgänglig');
-    }
-  } catch (error) {
-    showError('dailyChart', `Fel vid laddning av daglig data: ${error.message}`);
-  }
-  
-  // Load hourly chart
-  try {
-    const hourlyData = await fetchLast24Hours();
+    hourlyData = await fetchLast24Hours();
     if (hourlyData.length > 0) {
       renderHourlyChart(hourlyData);
     } else {
@@ -479,6 +551,18 @@ async function init() {
   } catch (error) {
     showError('hourlyChart', `Fel vid laddning av timdata: ${error.message}`);
     console.error('Hourly data error:', error);
+  }
+  
+  // Load daily chart (pass hourly data to calculate today's value)
+  try {
+    const dailyData = await fetchDailySnowfall();
+    if (dailyData.length > 0) {
+      renderDailyChart(dailyData, hourlyData);
+    } else {
+      showError('dailyChart', 'Ingen daglig data tillgänglig');
+    }
+  } catch (error) {
+    showError('dailyChart', `Fel vid laddning av daglig data: ${error.message}`);
   }
 }
 
