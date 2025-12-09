@@ -2,8 +2,8 @@ name: Fetch Weather Data
 
 on:
   schedule:
-    # Run daily at 8:15 AM UTC (9:15 AM CET / 10:15 AM CEST)
-    - cron: '15 8 * * *'
+    # Run daily at 7:15 AM UTC (8:15 AM CET / 9:15 AM CEST)
+    - cron: '15 7 * * *'
   workflow_dispatch: # Allow manual triggering
 
 jobs:

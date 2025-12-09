@@ -511,6 +511,25 @@ function renderHourlyChart(data) {
                 intersect: false,
                 callbacks: {
                     title: (context) => {
+                        // Visa timintervallet (t.ex. "10-11" istället för bara "10")
+                        const dataIndex = context[0].dataIndex;
+                        const hourData = data[dataIndex];
+                        if (hourData && hourData.timestamp) {
+                            const date = new Date(hourData.timestamp);
+                            const hour = date.toLocaleString('sv-SE', { 
+                                timeZone: 'Europe/Stockholm', 
+                                hour: '2-digit', 
+                                hourCycle: 'h23' 
+                            });
+                            const nextHour = new Date(date);
+                            nextHour.setHours(nextHour.getHours() + 1);
+                            const nextHourStr = nextHour.toLocaleString('sv-SE', { 
+                                timeZone: 'Europe/Stockholm', 
+                                hour: '2-digit', 
+                                hourCycle: 'h23' 
+                            });
+                            return `kl ${hour}-${nextHourStr}`;
+                        }
                         return context[0].label;
                     },
                     label: (context) => {
