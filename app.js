@@ -517,9 +517,25 @@ function renderHourlyChart(data) {
   
   const snowfall = data.map(d => d.snowfall);
   const slrValues = data.map(d => d.slr);
-  const colors = slrValues.map(slr => getSnowColor(slr));
+  
+  // Identify rain hours: hours where snowfall is negative
+  const rainHours = new Set();
+  data.forEach((hour, index) => {
+    if (hour.snowfall < 0) {
+      rainHours.add(index);
+    }
+  });
+  
+  // Colors: red for rain (negative values), snow color for positive values
+  const colors = snowfall.map((val, index) => {
+    if (val < 0) {
+      return 'rgba(220, 53, 69, 0.8)'; // Red for rain
+    }
+    return getSnowColor(slrValues[index]);
+  });
 
-  const totalSnowfall = snowfall.reduce((sum, d) => sum + d, 0);
+  // Exclude negative values from total snowfall calculation
+  const totalSnowfall = snowfall.reduce((sum, d) => d >= 0 ? sum + d : sum, 0);
 
   // Uppdatera HTML-titeln
   const chartTitleElement = document.querySelector('#hourlyChart').previousElementSibling;
@@ -532,12 +548,13 @@ function renderHourlyChart(data) {
     data: {
       labels: hours,
       datasets: [{
-        label: 'Snöfall (cm)',
+        label: 'Snöfall / Regn',
         data: snowfall,
         backgroundColor: colors,
         borderColor: colors,
         borderWidth: 1,
-        custom: slrValues
+        // Store SLR values and rain hours in custom field for tooltips
+        custom: { slrValues, rainHours }
       }]
     },
     options: {
@@ -574,8 +591,17 @@ function renderHourlyChart(data) {
                         return context[0].label;
                     },
                     label: (context) => {
+                        const dataIndex = context.dataIndex;
+                        const { slrValues, rainHours } = context.dataset.custom;
+                        
+                        if (rainHours.has(dataIndex)) {
+                            // Rain hour - show rain message
+                            return '☠️ Regn - snön är förstörd!';
+                        }
+                        
                         const cm = context.parsed.y.toFixed(1);
-                        const slr = context.dataset.custom[context.dataIndex].toFixed(1);
+                        const slr = slrValues[dataIndex];
+                        const slrStr = slr === -1 ? '-1' : slr.toFixed(1);
                         
                         if (window.innerWidth < 768) {
                             return `Snöfall: ${cm} cm`;
@@ -583,7 +609,7 @@ function renderHourlyChart(data) {
                         
                         return [
                             `Snöfall: ${cm} cm`,
-                            `Fluffighet (SLR): ${slr}`
+                            `Fluffighet (SLR): ${slrStr}`
                         ];
                     }
                 }
@@ -611,7 +637,7 @@ function renderHourlyChart(data) {
                     display: true,
                     text: 'Snöfall (cm)'
                 },
-                beginAtZero: true
+                beginAtZero: false // Allow negative values for rain
             }
         }
     }
