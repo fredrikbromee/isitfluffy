@@ -21,7 +21,8 @@ const calculateSnowfall = (temp, mm, wind, hum = 90) => {
   const wetBulb = temp - ((100 - hum) / 10);
 
   // Fail fast: För varmt för snö (även med wet bulb-effekt)
-  if (wetBulb > 1.0) return { amount: 0, slr: 0 };
+  // Returnera -1*mm, -1 för att indikera regn
+  if (wetBulb > 1.0) return { amount: -1*mm, slr: -1 };
 
   // 2. Beräkna Base SLR (Snow-to-Liquid Ratio)
   // Interpolerar mellan tung blötsnö och fluffig dendrit-snö

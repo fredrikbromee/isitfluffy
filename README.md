@@ -11,7 +11,7 @@ A mobile-friendly web application that displays recent snowfall data for Klövsj
 
 ## Data Sources
 
-- Historical data: Pre-calculated daily snowfall totals stored in `data/snowfall_daily.csv`
+- Historical data: Pre-calculated daily aggregated data stored in `data/aggregated_data.csv`
 - Live data: Direct API calls to SMHI for the last 24 hours
 
 ## Project Structure
@@ -21,7 +21,7 @@ A mobile-friendly web application that displays recent snowfall data for Klövsj
 - `index.html`: Main web application
 - `app.js`: Client-side JavaScript for charts and API calls
 - `data/weather_data.csv`: Hourly raw weather data
-- `data/snowfall_daily.csv`: Daily snowfall totals (loaded by web app)
+- `data/aggregated_data.csv`: Daily aggregated data (snowfall, SLR, temperature min/max, humidity avg)
 
 ## Development
 

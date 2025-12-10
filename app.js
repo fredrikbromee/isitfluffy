@@ -76,7 +76,7 @@ function parseCSV(csvText) {
 async function fetchDailySnowfall() {
   // ... (Code for fetchDailySnowfall remains the same)
   try {
-    const response = await fetch('data/snowfall_daily.csv');
+    const response = await fetch('data/aggregated_data.csv');
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
@@ -295,8 +295,19 @@ function calculateTodayFromHourly(hourlyData) {
     return null;
   }
   
-  // Sum snowfall amounts
-  const totalSnowfall = todayHours.reduce((sum, hour) => sum + (hour.snowfall || 0), 0);
+  // Check if it rained (any hour with negative amount or slr === -1)
+  const hasRain = todayHours.some(hour => hour.snowfall < 0);
+  
+  // If it rained, return -1, -1
+  if (hasRain) {
+    return { snowfall: -1, slr: -1 };
+  }
+  
+  // Sum snowfall amounts (filter out -1 values)
+  const totalSnowfall = todayHours.reduce((sum, hour) => {
+    const amount = hour.snowfall || 0;
+    return amount >= 0 ? sum + amount : sum;
+  }, 0);
   
   // Average SLR (only for hours with snowfall > 0)
   const hoursWithSnow = todayHours.filter(hour => hour.snowfall > 0);
@@ -341,6 +352,15 @@ function renderDailyChart(data, hourlyData = null) {
   let snowfall = data.map(row => parseFloat(row.snowfall_cm) || 0);
   let slrValues = data.map(row => parseFloat(row.slr) || 0);
   
+  // Identify rain days from CSV: days where snowfall_cm is negative (actual precipitation amount)
+  const rainDays = new Set();
+  data.forEach((row, index) => {
+    const snowfallVal = parseFloat(row.snowfall_cm);
+    if (snowfallVal < 0) {
+      rainDays.add(index);
+    }
+  });
+  
   // Replace today's value with calculated value from hourly data if available
   if (hourlyData && hourlyData.length > 0) {
     try {
@@ -359,6 +379,12 @@ function renderDailyChart(data, hourlyData = null) {
           // Replace today's values
           snowfall[todayIndex] = todayValue.snowfall;
           slrValues[todayIndex] = todayValue.slr;
+          
+          // If today has rain, mark it (snowfall < 0 or slr === -1)
+          if (todayValue.snowfall < 0) {
+            rainDays.add(todayIndex);
+          }
+          
           console.log(`Updated today's value: ${todayValue.snowfall.toFixed(1)} cm, SLR: ${todayValue.slr.toFixed(1)}`);
         } else {
           console.warn('Today not found in daily data. Today CET:', todayCET, 'Available dates:', data.slice(-5).map(r => getDateKeyInCET(new Date(r.date))));
@@ -373,20 +399,26 @@ function renderDailyChart(data, hourlyData = null) {
     console.warn('Hourly data not available for today calculation');
   }
   
-  const colors = slrValues.map(slr => getSnowColor(slr));
+  // Colors: red for rain (negative values), snow color for positive values
+  const colors = snowfall.map((val, index) => {
+    if (val < 0) {
+      return 'rgba(220, 53, 69, 0.8)'; // Red for rain
+    }
+    return getSnowColor(slrValues[index]);
+  });
 
   dailyChartInstance = new Chart(ctx, {
     type: 'bar',
     data: {
       labels: labels,
       datasets: [{
-        label: 'Snöfall (cm)',
+        label: 'Snöfall / Regn',
         data: snowfall,
         backgroundColor: colors,
         borderColor: colors,
         borderWidth: 1,
-        // Lägg SLR-data i 'custom' fältet för Tooltips
-        custom: slrValues 
+        // Lägg SLR-data och rainDays i 'custom' fältet för Tooltips
+        custom: { slrValues, rainDays }
       }]
     },
     options: {
@@ -406,8 +438,17 @@ function renderDailyChart(data, hourlyData = null) {
                         return fullDates[context[0].dataIndex];
                     },
                     label: (context) => {
+                        const dataIndex = context.dataIndex;
+                        const { slrValues, rainDays } = context.dataset.custom;
+                        
+                        if (rainDays.has(dataIndex)) {
+                            // Rain day - show rain message
+                            return '☠️ Regn - snön är förstörd!';
+                        }
+                        
                         const cm = context.parsed.y.toFixed(1);
-                        const slr = context.dataset.custom[context.dataIndex].toFixed(1);
+                        const slr = slrValues[dataIndex];
+                        const slrStr = slr === -1 ? '-1' : slr.toFixed(1);
                         
                         // Förenklad tooltip på mobil - Chart.js hanterar touch bra
                         if (window.innerWidth < 768) {
@@ -416,7 +457,7 @@ function renderDailyChart(data, hourlyData = null) {
                         
                         return [
                             `Snöfall: ${cm} cm`,
-                            `Fluffighet (SLR): ${slr}`
+                            `Fluffighet (SLR): ${slrStr}`
                         ];
                     }
                 }
@@ -442,7 +483,7 @@ function renderDailyChart(data, hourlyData = null) {
                     display: true,
                     text: 'Snöfall (cm)'
                 },
-                beginAtZero: true
+                beginAtZero: false // Allow negative values for rain
             }
         }
     }
