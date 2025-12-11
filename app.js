@@ -27,28 +27,51 @@ function interpolateColor(value, min, max, color1, color2, curve = 1.5) {
 
 /**
  * Get color based on snow fluffiness (SLR)
- * Gradient: Purple (wet/heavy snow) -> Dark blue -> Icy white-blue (dry/fluffy snow)
+ * Uses the exact same gradient as the legend: rgb(120, 60, 140) at 5 to rgb(245, 252, 255) at 30
+ * Gradient stops match the CSS gradient-bar:
+ *   0%: rgb(120, 60, 140)   - Purple (SLR 5)
+ *   20%: rgb(30, 60, 120)   - Dark blue
+ *   40%: rgb(70, 130, 180)  - Medium blue
+ *   70%: rgb(135, 206, 250) - Light blue
+ *   100%: rgb(245, 252, 255) - Ice blue (SLR 30)
  */
 function getSnowColor(slr) {
-  // Define color points - purple to dark blue to icy white-blue
-  const cPurple = [120, 60, 140];
-  const cDarkBlue = [30, 60, 120];
-  const cMediumBlue = [70, 130, 180];
-  const cLightBlue = [135, 206, 250];
-  const cIceBlue = [245, 252, 255];
+  // Define gradient color stops matching the CSS gradient
+  const gradientStops = [
+    { percent: 0, color: [120, 60, 140] },      // Purple
+    { percent: 20, color: [30, 60, 120] },      // Dark blue
+    { percent: 40, color: [70, 130, 180] },     // Medium blue
+    { percent: 70, color: [135, 206, 250] },    // Light blue
+    { percent: 100, color: [245, 252, 255] }    // Ice blue
+  ];
 
-  if (slr < 5) return `rgb(${cPurple.join(',')})`;
-  if (slr >= 30) return `rgb(${cIceBlue.join(',')})`;
+  // Clamp SLR to range [5, 30]
+  const clampedSlr = Math.max(5, Math.min(30, slr));
+  
+  // Map SLR (5-30) to gradient percentage (0-100)
+  const gradientPercent = ((clampedSlr - 5) / (30 - 5)) * 100;
 
-  if (slr < 8) {
-    return interpolateColor(slr, 5, 8, cPurple, cDarkBlue, 1.2);
-  } else if (slr < 12) {
-    return interpolateColor(slr, 8, 12, cDarkBlue, cMediumBlue, 1.2);
-  } else if (slr < 22) {
-    return interpolateColor(slr, 12, 22, cMediumBlue, cLightBlue, 1.2);
-  } else {
-    return interpolateColor(slr, 22, 30, cLightBlue, cIceBlue, 1.5);
+  // Find the two color stops to interpolate between
+  let startStop = gradientStops[0];
+  let endStop = gradientStops[gradientStops.length - 1];
+  
+  for (let i = 0; i < gradientStops.length - 1; i++) {
+    if (gradientPercent >= gradientStops[i].percent && gradientPercent <= gradientStops[i + 1].percent) {
+      startStop = gradientStops[i];
+      endStop = gradientStops[i + 1];
+      break;
+    }
   }
+
+  // Interpolate between the two color stops
+  const range = endStop.percent - startStop.percent;
+  const factor = range > 0 ? (gradientPercent - startStop.percent) / range : 0;
+  
+  const r = Math.round(startStop.color[0] + factor * (endStop.color[0] - startStop.color[0]));
+  const g = Math.round(startStop.color[1] + factor * (endStop.color[1] - startStop.color[1]));
+  const b = Math.round(startStop.color[2] + factor * (endStop.color[2] - startStop.color[2]));
+  
+  return `rgb(${r}, ${g}, ${b})`;
 }
 
 // --- [ DATA FETCHING LOGIC - KEPT AS IS ] ---
