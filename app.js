@@ -438,6 +438,44 @@ function calculateTodayFromHourly(hourlyData) {
 }
 
 /**
+ * Update subtitle with season info and total snowfall
+ * @param {Object} series - The data series with cumulative and fullDates
+ * @param {number|null} historicYear - If set, this is a historic season (start year)
+ */
+function updateSubtitle(series, historicYear = null) {
+  const subtitleEl = document.getElementById('subtitle');
+  if (!subtitleEl) return;
+
+  const { cumulative, fullDates } = series;
+  const totalSnow = cumulative[cumulative.length - 1] || 0;
+  
+  // Determine season from dates
+  let seasonText;
+  if (historicYear) {
+    seasonText = `Säsongen ${historicYear}-${historicYear + 1}`;
+  } else {
+    // Current season - determine from first date
+    if (fullDates && fullDates.length > 0) {
+      const firstDate = new Date(fullDates[0]);
+      const startYear = firstDate.getMonth() >= 6 ? firstDate.getFullYear() : firstDate.getFullYear() - 1;
+      seasonText = `Säsongen ${startYear}-${startYear + 1}`;
+    } else {
+      const now = new Date();
+      const startYear = now.getMonth() >= 6 ? now.getFullYear() : now.getFullYear() - 1;
+      seasonText = `Säsongen ${startYear}-${startYear + 1}`;
+    }
+  }
+
+  // Format text based on whether it's historic or current
+  const snowText = `${Math.round(totalSnow)} cm`;
+  if (historicYear) {
+    subtitleEl.textContent = `${seasonText}: ${snowText} snö`;
+  } else {
+    subtitleEl.textContent = `${seasonText}: ${snowText} hittills`;
+  }
+}
+
+/**
  * Render daily snowfall chart using Chart.js
  */
 function renderDailyChart(series) {
@@ -775,6 +813,7 @@ async function init() {
     if (dailyData.length > 0) {
       const dailySeries = prepareDailySeries(dailyData, hourlyData);
       renderDailyChart(dailySeries);
+      updateSubtitle(dailySeries);
     } else {
       showError('dailyChart', 'Ingen daglig data tillgänglig');
     }

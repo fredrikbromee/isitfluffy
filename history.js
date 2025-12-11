@@ -105,31 +105,59 @@ async function fetchHistoricalData(year) {
 }
 
 /**
- * Populate year selector dropdown
+ * Get available seasons and initialize navigation
  */
-async function populateYearSelector() {
-  const select = document.getElementById('yearSelect');
-  const seasons = await getAvailableSeasons();
-  
+let availableSeasons = [];
+
+async function initializeSeasons() {
+  availableSeasons = await getAvailableSeasons();
   // Sort in descending order (newest first)
-  seasons.sort((a, b) => b - a);
-  
-  select.innerHTML = '<option value="">Välj vintersäsong...</option>';
-  
-  seasons.forEach(year => {
-    const option = document.createElement('option');
-    option.value = year;
-    option.textContent = `${year}-${year + 1}`;
-    select.appendChild(option);
-  });
+  availableSeasons.sort((a, b) => b - a);
   
   // Set selected year from URL or default to most recent
   const urlYear = getYearFromURL();
-  const selectedYear = urlYear || seasons[0];
+  const selectedYear = urlYear || availableSeasons[0];
   if (selectedYear) {
-    select.value = selectedYear;
     await loadSeason(selectedYear);
   }
+}
+
+/**
+ * Update navigation links based on current season
+ */
+function updateNavigation(currentYear) {
+  const navContainer = document.getElementById('chartNavigation');
+  const prevLink = document.getElementById('prevSeasonLink');
+  const nextLink = document.getElementById('nextSeasonLink');
+  
+  // Find current index in sorted seasons
+  const currentIndex = availableSeasons.indexOf(currentYear);
+  
+  // Previous season (older, higher index since sorted descending)
+  if (currentIndex < availableSeasons.length - 1) {
+    const prevYear = availableSeasons[currentIndex + 1];
+    prevLink.textContent = `← ${prevYear}-${prevYear + 1}`;
+    prevLink.href = `?year=${prevYear}`;
+    prevLink.style.visibility = 'visible';
+  } else {
+    prevLink.style.visibility = 'hidden';
+  }
+  
+  // Next season (newer, lower index since sorted descending)
+  if (currentIndex > 0) {
+    const nextYear = availableSeasons[currentIndex - 1];
+    nextLink.textContent = `${nextYear}-${nextYear + 1} →`;
+    nextLink.href = `?year=${nextYear}`;
+    nextLink.style.visibility = 'visible';
+  } else {
+    // Link to current season on index page
+    nextLink.textContent = 'Nuvarande säsong →';
+    nextLink.href = 'index.html';
+    nextLink.style.visibility = 'visible';
+  }
+  
+  // Show navigation container with flex
+  navContainer.style.display = 'flex';
 }
 
 /**
@@ -142,12 +170,18 @@ async function loadSeason(year) {
     loadingElement.style.display = 'block';
   }
   
+  // Hide navigation while loading
+  const navContainer = document.getElementById('chartNavigation');
+  navContainer.style.display = 'none';
+  
   try {
     const data = await fetchHistoricalData(year);
     if (data.length > 0) {
       const dailySeries = prepareDailySeries(data);
-      renderDailyChart(dailySeries); // No hourly data for historical seasons
+      renderDailyChart(dailySeries);
+      updateSubtitle(dailySeries, year);
       updateURL(year);
+      updateNavigation(year);
       
       // Hide loading message
       if (loadingElement && loadingElement.classList.contains('loading')) {
@@ -166,13 +200,30 @@ async function loadSeason(year) {
  * Initialize history page
  */
 async function initHistory() {
-  // Populate year selector
-  await populateYearSelector();
+  // Initialize seasons and load default
+  await initializeSeasons();
   
-  // Add event listener for year selector
-  const select = document.getElementById('yearSelect');
-  select.addEventListener('change', async (e) => {
-    const year = parseInt(e.target.value, 10);
+  // Add event listeners for navigation links
+  const prevLink = document.getElementById('prevSeasonLink');
+  const nextLink = document.getElementById('nextSeasonLink');
+  
+  prevLink.addEventListener('click', async (e) => {
+    e.preventDefault();
+    const href = prevLink.getAttribute('href');
+    const year = parseInt(new URLSearchParams(href.split('?')[1]).get('year'), 10);
+    if (!isNaN(year)) {
+      await loadSeason(year);
+    }
+  });
+  
+  nextLink.addEventListener('click', async (e) => {
+    const href = nextLink.getAttribute('href');
+    // If it's an external link (no query params), let it navigate normally
+    if (!href.includes('?')) {
+      return;
+    }
+    e.preventDefault();
+    const year = parseInt(new URLSearchParams(href.split('?')[1]).get('year'), 10);
     if (!isNaN(year)) {
       await loadSeason(year);
     }
@@ -182,7 +233,6 @@ async function initHistory() {
   window.addEventListener('popstate', async (e) => {
     const year = e.state?.year || getYearFromURL();
     if (year) {
-      select.value = year;
       await loadSeason(year);
     }
   });
