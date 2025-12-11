@@ -145,7 +145,8 @@ async function loadSeason(year) {
   try {
     const data = await fetchHistoricalData(year);
     if (data.length > 0) {
-      renderDailyChart(data, null); // No hourly data for historical seasons
+      const dailySeries = prepareDailySeries(data);
+      renderDailyChart(dailySeries); // No hourly data for historical seasons
       updateURL(year);
       
       // Hide loading message

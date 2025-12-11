@@ -208,6 +208,100 @@ function destroyChart(instance) {
 }
 
 /**
+ * Build shared series for daily and cumulative charts
+ */
+function prepareDailySeries(data, hourlyData = null) {
+  // Group data by month and find middle index for each month
+  const monthGroups = {};
+  data.forEach((row, index) => {
+    const date = new Date(row.date);
+    const monthKey = `${date.getFullYear()}-${date.getMonth()}`;
+    if (!monthGroups[monthKey]) {
+      monthGroups[monthKey] = { indices: [], monthAbbr: getSwedishMonthAbbr(date) };
+    }
+    monthGroups[monthKey].indices.push(index);
+  });
+
+  // Create labels array - only show month abbreviation at middle of each month
+  const labels = new Array(data.length).fill('');
+  Object.values(monthGroups).forEach(group => {
+    if (group.indices.length > 0) {
+      const middleIndex = group.indices[Math.floor(group.indices.length / 2)];
+      labels[middleIndex] = group.monthAbbr;
+    }
+  });
+
+  const fullDates = data.map(row => row.date); // Keep for tooltips
+  let snowfall = data.map(row => parseFloat(row.snowfall_cm) || 0);
+  let slrValues = data.map(row => parseFloat(row.slr) || 0);
+
+  // Identify rain days from CSV: days where snowfall_cm is negative (actual precipitation amount)
+  const rainDays = new Set();
+  data.forEach((row, index) => {
+    const snowfallVal = parseFloat(row.snowfall_cm);
+    if (snowfallVal < 0) {
+      rainDays.add(index);
+    }
+  });
+
+  // Replace today's value with calculated value from hourly data if available
+  if (hourlyData && hourlyData.length > 0) {
+    try {
+      const todayValue = calculateTodayFromHourly(hourlyData);
+      if (todayValue) {
+        const todayCET = getDateKeyInCET(new Date());
+        
+        // Find today's index in the daily data
+        const todayIndex = data.findIndex(row => {
+          const rowDate = new Date(row.date);
+          const rowDateCET = getDateKeyInCET(rowDate);
+          return rowDateCET === todayCET;
+        });
+        
+        if (todayIndex !== -1) {
+          // Replace today's values
+          snowfall[todayIndex] = todayValue.snowfall;
+          slrValues[todayIndex] = todayValue.slr;
+          
+          // If today has rain, mark it (snowfall < 0 or slr === -1)
+          if (todayValue.snowfall < 0) {
+            rainDays.add(todayIndex);
+          }
+          
+          console.log(`Updated today's value: ${todayValue.snowfall.toFixed(1)} cm, SLR: ${todayValue.slr.toFixed(1)}`);
+        } else {
+          console.warn('Today not found in daily data. Today CET:', todayCET, 'Available dates:', data.slice(-5).map(r => getDateKeyInCET(new Date(r.date))));
+        }
+      } else {
+        console.warn('No hourly data found for today since 8 AM');
+      }
+    } catch (error) {
+      console.error('Error calculating today from hourly data:', error);
+    }
+  } else if (hourlyData) {
+    console.warn('Hourly data not available for today calculation');
+  }
+
+  // Build cumulative snowfall (ignore rain/negative values)
+  const cumulative = [];
+  let runningTotal = 0;
+  snowfall.forEach((val) => {
+    const safeVal = val > 0 ? val : 0;
+    runningTotal += safeVal;
+    cumulative.push(Number(runningTotal.toFixed(1)));
+  });
+
+  return {
+    labels,
+    fullDates,
+    snowfall,
+    slrValues,
+    rainDays,
+    cumulative
+  };
+}
+
+/**
  * Get Swedish month abbreviation
  */
 function getSwedishMonthAbbr(date) {
@@ -323,85 +417,24 @@ function calculateTodayFromHourly(hourlyData) {
 /**
  * Render daily snowfall chart using Chart.js
  */
-function renderDailyChart(data, hourlyData = null) {
+function renderDailyChart(series) {
   destroyChart(dailyChartInstance);
 
   const ctx = document.getElementById('dailyChart').getContext('2d');
-  
-  // Group data by month and find middle index for each month
-  const monthGroups = {};
-  data.forEach((row, index) => {
-    const date = new Date(row.date);
-    const monthKey = `${date.getFullYear()}-${date.getMonth()}`;
-    if (!monthGroups[monthKey]) {
-      monthGroups[monthKey] = { indices: [], monthAbbr: getSwedishMonthAbbr(date) };
+
+  const { labels, fullDates, snowfall, slrValues, rainDays, cumulative } = series;
+
+  // Create display data: rain as positive values (upward bars), snow as is
+  const displayData = snowfall.map((val, index) => {
+    if (rainDays.has(index)) {
+      return Math.abs(val); // Show rain as positive value (upward bar)
     }
-    monthGroups[monthKey].indices.push(index);
+    return val;
   });
-  
-  // Create labels array - only show month abbreviation at middle of each month
-  const labels = new Array(data.length).fill('');
-  Object.values(monthGroups).forEach(group => {
-    if (group.indices.length > 0) {
-      const middleIndex = group.indices[Math.floor(group.indices.length / 2)];
-      labels[middleIndex] = group.monthAbbr;
-    }
-  });
-  
-  const fullDates = data.map(row => row.date); // Keep for tooltips
-  let snowfall = data.map(row => parseFloat(row.snowfall_cm) || 0);
-  let slrValues = data.map(row => parseFloat(row.slr) || 0);
-  
-  // Identify rain days from CSV: days where snowfall_cm is negative (actual precipitation amount)
-  const rainDays = new Set();
-  data.forEach((row, index) => {
-    const snowfallVal = parseFloat(row.snowfall_cm);
-    if (snowfallVal < 0) {
-      rainDays.add(index);
-    }
-  });
-  
-  // Replace today's value with calculated value from hourly data if available
-  if (hourlyData && hourlyData.length > 0) {
-    try {
-      const todayValue = calculateTodayFromHourly(hourlyData);
-      if (todayValue) {
-        const todayCET = getDateKeyInCET(new Date());
-        
-        // Find today's index in the daily data
-        const todayIndex = data.findIndex(row => {
-          const rowDate = new Date(row.date);
-          const rowDateCET = getDateKeyInCET(rowDate);
-          return rowDateCET === todayCET;
-        });
-        
-        if (todayIndex !== -1) {
-          // Replace today's values
-          snowfall[todayIndex] = todayValue.snowfall;
-          slrValues[todayIndex] = todayValue.slr;
-          
-          // If today has rain, mark it (snowfall < 0 or slr === -1)
-          if (todayValue.snowfall < 0) {
-            rainDays.add(todayIndex);
-          }
-          
-          console.log(`Updated today's value: ${todayValue.snowfall.toFixed(1)} cm, SLR: ${todayValue.slr.toFixed(1)}`);
-        } else {
-          console.warn('Today not found in daily data. Today CET:', todayCET, 'Available dates:', data.slice(-5).map(r => getDateKeyInCET(new Date(r.date))));
-        }
-      } else {
-        console.warn('No hourly data found for today since 8 AM');
-      }
-    } catch (error) {
-      console.error('Error calculating today from hourly data:', error);
-    }
-  } else {
-    console.warn('Hourly data not available for today calculation');
-  }
-  
-  // Colors: red for rain (negative values), snow color for positive values
+
+  // Colors: red for rain, snow color for positive values
   const colors = snowfall.map((val, index) => {
-    if (val < 0) {
+    if (rainDays.has(index)) {
       return 'rgba(220, 53, 69, 0.8)'; // Red for rain
     }
     return getSnowColor(slrValues[index]);
@@ -411,46 +444,61 @@ function renderDailyChart(data, hourlyData = null) {
     type: 'bar',
     data: {
       labels: labels,
-      datasets: [{
-        label: 'Snöfall / Regn',
-        data: snowfall,
-        backgroundColor: colors,
-        borderColor: colors,
-        borderWidth: 1,
-        // Lägg SLR-data och rainDays i 'custom' fältet för Tooltips
-        custom: { slrValues, rainDays }
-      }]
+      datasets: [
+        {
+          label: 'Snöfall / Regn',
+          data: displayData,
+          backgroundColor: colors,
+          borderColor: colors,
+          borderWidth: 1,
+          custom: { slrValues, rainDays, snowfall }, // Keep original snowfall for tooltips
+          yAxisID: 'snow'
+        },
+        {
+          type: 'line',
+          label: 'Kumulativt snöfall',
+          data: cumulative,
+          borderColor: 'rgba(118, 75, 162, 0.9)',
+          backgroundColor: 'rgba(118, 75, 162, 0.1)',
+          tension: 0.2,
+          pointRadius: 0,
+          borderWidth: 2,
+          fill: true,
+          yAxisID: 'depth'
+        }
+      ]
     },
     options: {
         responsive: true,
-        maintainAspectRatio: false, // Låter Chart.js ta container-storleken
+        maintainAspectRatio: false,
         plugins: {
             legend: {
-                display: false // Tar bort Chart.js legend, vi har en egen
+                display: false
             },
             tooltip: {
-                // Konfigurera Tooltip för touch-enheter
                 mode: 'index',
                 intersect: false,
                 callbacks: {
-                    title: (context) => {
-                        // Visa fullt datum i tooltip
-                        return fullDates[context[0].dataIndex];
-                    },
+                    title: (context) => fullDates[context[0].dataIndex],
                     label: (context) => {
+                        const dataset = context.dataset;
+                        if (dataset.yAxisID === 'depth') {
+                            return `Totalt: ${context.parsed.y.toFixed(1)} cm`;
+                        }
+
                         const dataIndex = context.dataIndex;
-                        const { slrValues, rainDays } = context.dataset.custom;
+                        const { slrValues, rainDays, snowfall } = dataset.custom;
                         
                         if (rainDays.has(dataIndex)) {
-                            // Rain day - show rain message
-                            return '☠️ Regn - snön är förstörd!';
+                            // Show rain amount in mm (original negative value is precipitation in mm)
+                            const rainMm = Math.abs(snowfall[dataIndex]);
+                            return `☠️ Regn: ${rainMm.toFixed(1)} mm - snön är förstörd!`;
                         }
                         
                         const cm = context.parsed.y.toFixed(1);
                         const slr = slrValues[dataIndex];
                         const slrStr = slr === -1 ? '-1' : slr.toFixed(1);
                         
-                        // Förenklad tooltip på mobil - Chart.js hanterar touch bra
                         if (window.innerWidth < 768) {
                             return `Snöfall: ${cm} cm`;
                         }
@@ -464,26 +512,39 @@ function renderDailyChart(data, hourlyData = null) {
             }
         },
         scales: {
+            snow: {
+                type: 'linear',
+                position: 'left',
+                title: {
+                    display: true,
+                    text: 'Snöfall / Regn (cm)'
+                },
+                beginAtZero: true
+            },
+            depth: {
+                type: 'linear',
+                position: 'right',
+                title: {
+                    display: true,
+                    text: 'Kumulativt snöfall (cm)'
+                },
+                grid: {
+                    drawOnChartArea: false
+                },
+                beginAtZero: true
+            },
             x: {
                 title: {
                     display: false
                 },
-                // Show labels (empty strings will be automatically skipped by Chart.js)
                 ticks: {
-                    maxRotation: 0, // Month abbreviations are short, no rotation needed
+                    maxRotation: 0,
                     minRotation: 0,
-                    autoSkip: false // Don't auto-skip - we control which labels to show
+                    autoSkip: false
                 },
                 grid: {
                     display: false
                 }
-            },
-            y: {
-                title: {
-                    display: true,
-                    text: 'Snöfall (cm)'
-                },
-                beginAtZero: false // Allow negative values for rain
             }
         }
     }
@@ -496,6 +557,9 @@ function renderDailyChart(data, hourlyData = null) {
   }
 }
 
+/**
+ * Render cumulative snowfall line chart
+ */
 /**
  * Render hourly snowfall chart using Chart.js
  */
@@ -686,7 +750,8 @@ async function init() {
   try {
     const dailyData = await fetchDailySnowfall();
     if (dailyData.length > 0) {
-      renderDailyChart(dailyData, hourlyData);
+      const dailySeries = prepareDailySeries(dailyData, hourlyData);
+      renderDailyChart(dailySeries);
     } else {
       showError('dailyChart', 'Ingen daglig data tillgänglig');
     }
