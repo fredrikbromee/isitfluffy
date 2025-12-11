@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { calculateSnowfall } = require('./snowfall.js');
+const { addAccumulatedSnowfall } = require('./accumulation.js');
 
 const RAW_DATA_DIR = path.join(__dirname, 'data', 'raw');
 const HISTORIC_DATA_DIR = path.join(__dirname, 'data', 'historic');
@@ -412,14 +413,21 @@ function writeAggregatedFiles(aggregated) {
     fs.mkdirSync(HISTORIC_DATA_DIR, { recursive: true });
   }
   
-  const header = 'date,snowfall_cm,slr,temp_max,temp_min,humidity_avg\n';
+  const header = 'date,snowfall_cm,slr,temp_max,temp_min,humidity_avg,accumulated_snowfall_cm\n';
   
   for (const [season, data] of Object.entries(aggregated)) {
     const filename = `agg${season}.csv`;
     const filepath = path.join(HISTORIC_DATA_DIR, filename);
     
-    const lines = data.map(row => 
-      `${row.date},${row.snowfall_cm},${row.slr},${row.temp_max},${row.temp_min},${row.humidity_avg}`
+    // Add accumulated snowfall for this season (season already isolated, so no cutoff)
+    const withAccumulated = addAccumulatedSnowfall(data, {
+      seasonStartMonth: 10, // November
+      seasonStartDay: 1,
+      cutoffDate: null,
+    });
+
+    const lines = withAccumulated.map(row => 
+      `${row.date},${row.snowfall_cm},${row.slr},${row.temp_max},${row.temp_min},${row.humidity_avg},${row.accumulated_snowfall_cm}`
     );
     
     const content = header + lines.join('\n') + '\n';

@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { calculateSnowfall } = require('./snowfall.js');
+const { addAccumulatedSnowfall } = require('./accumulation.js');
 const { STATION_ID, PARAMETER_CODES, parseSMHITimestamp, parseSMHIEntry, fetchSMHIData } = require('./smhi_api.js');
 
 const DATA_DIR = path.join(__dirname, 'data');
@@ -68,7 +69,7 @@ function initializeCSVFiles() {
 
   // Initialize aggregated_data.csv
   if (!fs.existsSync(AGGREGATED_DATA_FILE)) {
-    const header = 'date,snowfall_cm,slr,temp_max,temp_min,humidity_avg\n';
+    const header = 'date,snowfall_cm,slr,temp_max,temp_min,humidity_avg,accumulated_snowfall_cm\n';
     fs.writeFileSync(AGGREGATED_DATA_FILE, header);
   }
 }
@@ -300,48 +301,57 @@ function calculateDailySnowfall() {
     }
   }
   
-  // Read existing daily data
-  const existingDaily = new Set();
-  if (fs.existsSync(AGGREGATED_DATA_FILE)) {
-    const dailyContent = fs.readFileSync(AGGREGATED_DATA_FILE, 'utf-8');
-    const dailyLines = dailyContent.trim().split('\n').slice(1);
-    for (const line of dailyLines) {
-      if (line.trim()) {
-        const date = line.split(',')[0];
-        existingDaily.add(date);
-      }
-    }
-  }
-  
-  // Write updated daily totals with SLR, temp min/max, and humidity avg
-  const header = 'date,snowfall_cm,slr,temp_max,temp_min,humidity_avg\n';
-  const allDays = Object.keys(dailyTotals).sort();
-  const dailyLines = allDays.map(date => {
+  // Build rows with daily metrics
+  const rows = Object.keys(dailyTotals).sort().map(date => {
     const day = dailyTotals[date];
-    
-    // Calculate temperature min/max
+
     const tempMax = day.temperatures.length > 0 
       ? Math.max(...day.temperatures).toFixed(1) 
       : '';
     const tempMin = day.temperatures.length > 0 
       ? Math.min(...day.temperatures).toFixed(1) 
       : '';
-    
-    // Calculate average humidity
+
     const humidityAvg = day.humidities.length > 0
       ? (day.humidities.reduce((sum, h) => sum + h, 0) / day.humidities.length).toFixed(1)
       : '';
-    
-    // If it rained, write -1, -1 for snowfall and slr, but keep temp/humidity
+
     if (day.hasRain) {
-      return `${date},-1,-1,${tempMax},${tempMin},${humidityAvg}`;
+      return {
+        date,
+        snowfall_cm: '-1',
+        slr: '-1',
+        temp_max: tempMax,
+        temp_min: tempMin,
+        humidity_avg: humidityAvg,
+      };
     }
+
     const avgSlr = day.totalAmount > 0 ? (day.weightedSlr / day.totalAmount).toFixed(1) : '0';
-    return `${date},${day.total.toFixed(2)},${avgSlr},${tempMax},${tempMin},${humidityAvg}`;
+    return {
+      date,
+      snowfall_cm: day.total.toFixed(2),
+      slr: avgSlr,
+      temp_max: tempMax,
+      temp_min: tempMin,
+      humidity_avg: humidityAvg,
+    };
   });
-  
+
+  // Add accumulated snowfall, filtering out days before Nov 1, 2025
+  const accumulatedRows = addAccumulatedSnowfall(rows, {
+    seasonStartMonth: 10, // November
+    seasonStartDay: 1,
+    cutoffDate: '2025-11-01',
+  });
+
+  const header = 'date,snowfall_cm,slr,temp_max,temp_min,humidity_avg,accumulated_snowfall_cm\n';
+  const dailyLines = accumulatedRows.map(row =>
+    `${row.date},${row.snowfall_cm},${row.slr},${row.temp_max},${row.temp_min},${row.humidity_avg},${row.accumulated_snowfall_cm}`
+  );
+
   fs.writeFileSync(AGGREGATED_DATA_FILE, header + dailyLines.join('\n') + '\n');
-  console.log(`Updated daily aggregated data for ${allDays.length} days`);
+  console.log(`Updated daily aggregated data for ${dailyLines.length} days (filtered to Nov 1st, 2025 onwards)`);
 }
 
 /**
@@ -359,7 +369,7 @@ async function bootstrapHistoricalData(startDate = '2025-10-01') {
       fs.writeFileSync(WEATHER_DATA_FILE, header);
     }
     if (fs.existsSync(AGGREGATED_DATA_FILE)) {
-      const header = 'date,snowfall_cm,slr,temp_max,temp_min,humidity_avg\n';
+      const header = 'date,snowfall_cm,slr,temp_max,temp_min,humidity_avg,accumulated_snowfall_cm\n';
       fs.writeFileSync(AGGREGATED_DATA_FILE, header);
     }
     
