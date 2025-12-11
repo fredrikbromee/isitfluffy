@@ -8,24 +8,27 @@
 async function getAvailableSeasons() {
   // We know the pattern: agg9596.csv means season 1995-1996 (starting year 1995)
   // The files go from agg9596 to agg2425 (1995 to 2024)
-  const seasons = [];
+  const years = [];
   for (let year = 1995; year <= 2024; year++) {
-    const year1 = String(year).slice(-2);
-    const year2 = String(year + 1).slice(-2);
-    const filename = `agg${year1}${year2}.csv`;
-    
-    // Try to fetch the file to see if it exists
-    try {
-      const response = await fetch(`data/historic/${filename}`);
-      if (response.ok) {
-        seasons.push(year);
-      }
-    } catch (error) {
-      // File doesn't exist, skip
-      console.debug(`Season ${year} not available: ${filename}`);
-    }
+    years.push(year);
   }
-  return seasons;
+  
+  // Fetch all seasons in parallel instead of sequentially
+  const results = await Promise.all(
+    years.map(async (year) => {
+      const year1 = String(year).slice(-2);
+      const year2 = String(year + 1).slice(-2);
+      const filename = `agg${year1}${year2}.csv`;
+      try {
+        const response = await fetch(`data/historic/${filename}`, { method: 'HEAD' });
+        return response.ok ? year : null;
+      } catch (error) {
+        return null;
+      }
+    })
+  );
+  
+  return results.filter(year => year !== null);
 }
 
 /**
@@ -110,16 +113,22 @@ async function fetchHistoricalData(year) {
 let availableSeasons = [];
 
 async function initializeSeasons() {
-  availableSeasons = await getAvailableSeasons();
-  // Sort in descending order (newest first)
+  // Use URL year or default to 2024
+  const selectedYear = getYearFromURL() || 2024;
+  
+  // Start loading the requested season immediately
+  const loadPromise = loadSeason(selectedYear, false); // Don't update navigation yet
+  
+  // Fetch available seasons in background
+  const seasonsPromise = getAvailableSeasons();
+  
+  // Wait for both, but the season will render as soon as it's ready
+  await loadPromise;
+  availableSeasons = await seasonsPromise;
   availableSeasons.sort((a, b) => b - a);
   
-  // Set selected year from URL or default to most recent
-  const urlYear = getYearFromURL();
-  const selectedYear = urlYear || availableSeasons[0];
-  if (selectedYear) {
-    await loadSeason(selectedYear);
-  }
+  // Now update navigation with full season list
+  updateNavigation(selectedYear);
 }
 
 /**
@@ -162,8 +171,10 @@ function updateNavigation(currentYear) {
 
 /**
  * Load and display data for a specific season
+ * @param {number} year - The year to load
+ * @param {boolean} updateNav - Whether to update navigation (default: true)
  */
-async function loadSeason(year) {
+async function loadSeason(year, updateNav = true) {
   const loadingElement = document.querySelector('#dailyChart').nextElementSibling;
   if (loadingElement && loadingElement.classList.contains('loading')) {
     loadingElement.textContent = 'Laddar data...';
@@ -181,7 +192,11 @@ async function loadSeason(year) {
       renderDailyChart(dailySeries);
       updateSubtitle(dailySeries, year);
       updateURL(year);
-      updateNavigation(year);
+      
+      // Only update navigation if we have the full season list
+      if (updateNav && availableSeasons.length > 0) {
+        updateNavigation(year);
+      }
       
       // Hide loading message
       if (loadingElement && loadingElement.classList.contains('loading')) {
