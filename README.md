@@ -52,3 +52,16 @@ The daily data fetching script runs automatically via GitHub Actions at 8:15 AM 
 
 To manually trigger the workflow, go to Actions → Fetch Weather Data → Run workflow
 
+## License
+
+MIT License
+
+Copyright (c) 2025 Fredrik Bromee
+
+This software is licensed under the MIT License. See [LICENSE](LICENSE) file for details.
+
+### Data Source
+
+This project uses weather data from SMHI (Swedish Meteorological and 
+Hydrological Institute), licensed under Creative Commons Attribution 4.0 
+Sweden (CC BY 4.0 SE). SMHI data can be accessed at: https://www.smhi.se/data
