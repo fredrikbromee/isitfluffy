@@ -438,6 +438,30 @@ function calculateTodayFromHourly(hourlyData) {
 }
 
 /**
+ * Update page title based on season
+ * @param {number|null} historicYear - If set, this is a historic season (start year)
+ * @param {Array} fullDates - Optional array of dates to determine season from
+ */
+function updatePageTitle(historicYear = null, fullDates = null) {
+  let titleText;
+  if (historicYear) {
+    titleText = `Snö i Klövsjö vintern ${historicYear}-${historicYear + 1}`;
+  } else {
+    // Current season - determine from dates or current date
+    let startYear;
+    if (fullDates && fullDates.length > 0) {
+      const firstDate = new Date(fullDates[0]);
+      startYear = firstDate.getMonth() >= 6 ? firstDate.getFullYear() : firstDate.getFullYear() - 1;
+    } else {
+      const now = new Date();
+      startYear = now.getMonth() >= 6 ? now.getFullYear() : now.getFullYear() - 1;
+    }
+    titleText = `Snö i Klövsjö vintern ${startYear}-${startYear + 1}`;
+  }
+  document.title = titleText;
+}
+
+/**
  * Update subtitle with season info and total snowfall
  * @param {Object} series - The data series with cumulative and fullDates
  * @param {number|null} historicYear - If set, this is a historic season (start year)
@@ -814,6 +838,7 @@ async function init() {
       const dailySeries = prepareDailySeries(dailyData, hourlyData);
       renderDailyChart(dailySeries);
       updateSubtitle(dailySeries);
+      updatePageTitle(null, dailySeries.fullDates);
     } else {
       showError('dailyChart', 'Ingen daglig data tillgänglig');
     }

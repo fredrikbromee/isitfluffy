@@ -67,6 +67,23 @@ function updateURL(year) {
 }
 
 /**
+ * Update page title based on season
+ * @param {number|null} historicYear - If set, this is a historic season (start year)
+ */
+function updatePageTitle(historicYear = null) {
+  let titleText;
+  if (historicYear) {
+    titleText = `Snö i Klövsjö vintern ${historicYear}-${historicYear + 1}`;
+  } else {
+    // Current season - determine from current date
+    const now = new Date();
+    const startYear = now.getMonth() >= 6 ? now.getFullYear() : now.getFullYear() - 1;
+    titleText = `Snö i Klövsjö vintern ${startYear}-${startYear + 1}`;
+  }
+  document.title = titleText;
+}
+
+/**
  * Parse CSV text to array of objects
  */
 function parseCSV(csvText) {
@@ -191,6 +208,7 @@ async function loadSeason(year, updateNav = true) {
       const dailySeries = prepareDailySeries(data);
       renderDailyChart(dailySeries);
       updateSubtitle(dailySeries, year);
+      updatePageTitle(year);
       updateURL(year);
       
       // Only update navigation if we have the full season list
