@@ -215,3 +215,23 @@ h1 {
         padding-right: max(15px, env(safe-area-inset-right));
     }
 }
+
+/* Footer / Attribution */
+.attribution {
+    margin-top: 30px;
+    padding-top: 20px;
+    border-top: 1px solid #e0e0e0;
+    text-align: center;
+    font-size: 0.85em;
+    color: #7f8c8d;
+    line-height: 1.6;
+}
+
+.attribution a {
+    color: #667eea;
+    text-decoration: none;
+}
+
+.attribution a:hover {
+    text-decoration: underline;
+}
