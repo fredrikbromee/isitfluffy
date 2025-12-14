@@ -267,18 +267,40 @@ function prepareDailySeries(data, hourlyData = null) {
     }
   });
 
-  // Replace today's value with calculated value from hourly data if available
+  // Replace or ADD current meteorological day's value with calculated value from hourly data
   if (hourlyData && hourlyData.length > 0) {
     try {
       const todayValue = calculateTodayFromHourly(hourlyData);
       if (todayValue) {
-        const todayCET = getDateKeyInCET(new Date());
+        // Determine which meteorological day we're in (same logic as calculateTodayFromHourly)
+        // SMHI timestamp = end of period, so we need to check the latest data point
+        const latestDataPoint = hourlyData.reduce((latest, hour) => {
+          if (!hour || !hour.timestamp) return latest;
+          const hourDate = hour.timestamp instanceof Date ? hour.timestamp : new Date(hour.timestamp);
+          if (!latest || hourDate > latest) return hourDate;
+          return latest;
+        }, null);
         
-        // Find today's index in the daily data
+        let currentMetDayCET;
+        if (latestDataPoint) {
+          const effectiveHourCET = getHourInCET(latestDataPoint);
+          if (effectiveHourCET <= 8) {
+            // Still in yesterday's meteorological day
+            const yesterday = new Date(latestDataPoint);
+            yesterday.setDate(yesterday.getDate() - 1);
+            currentMetDayCET = getDateKeyInCET(yesterday);
+          } else {
+            currentMetDayCET = getDateKeyInCET(latestDataPoint);
+          }
+        } else {
+          currentMetDayCET = getDateKeyInCET(new Date());
+        }
+        
+        // Find current met day's index in the daily data
         const todayIndex = data.findIndex(row => {
           const rowDate = new Date(row.date);
           const rowDateCET = getDateKeyInCET(rowDate);
-          return rowDateCET === todayCET;
+          return rowDateCET === currentMetDayCET;
         });
         
         if (todayIndex !== -1) {
@@ -291,12 +313,24 @@ function prepareDailySeries(data, hourlyData = null) {
             rainDays.add(todayIndex);
           }
           
-          console.log(`Updated today's value: ${todayValue.snowfall.toFixed(1)} cm, SLR: ${todayValue.slr.toFixed(1)}`);
+          console.log(`Updated met day ${currentMetDayCET}: ${todayValue.snowfall.toFixed(1)} cm, SLR: ${todayValue.slr.toFixed(1)}`);
         } else {
-          console.warn('Today not found in daily data. Today CET:', todayCET, 'Available dates:', data.slice(-5).map(r => getDateKeyInCET(new Date(r.date))));
+          // Current met day not in CSV yet - ADD it as a new entry
+          console.log(`Adding met day ${currentMetDayCET} to daily data: ${todayValue.snowfall.toFixed(1)} cm, SLR: ${todayValue.slr.toFixed(1)}`);
+          
+          // Add today's date to labels (use empty string to match pattern - month label added separately)
+          labels.push('');
+          fullDates.push(currentMetDayCET);
+          snowfall.push(todayValue.snowfall);
+          slrValues.push(todayValue.slr);
+          
+          // Mark as rain day if applicable
+          if (todayValue.snowfall < 0) {
+            rainDays.add(snowfall.length - 1);
+          }
         }
       } else {
-        console.warn('No hourly data found for today since 8 AM');
+        console.warn('No hourly data found for current meteorological day');
       }
     } catch (error) {
       console.error('Error calculating today from hourly data:', error);
@@ -359,26 +393,67 @@ function getHourInCET(date) {
 }
 
 /**
- * Calculate today's value from hourly data (since 8 AM CET)
+ * Calculate today's value from hourly data (since last 8 AM CET)
+ * 
+ * IMPORTANT: SMHI timestamps represent END of observation period.
+ * - Timestamp 08:00 = data for period 07:00-08:00 (snow fell BEFORE 08:00)
+ * - Timestamp 09:00 = data for period 08:00-09:00 (snow fell AFTER 08:00)
+ * 
+ * For meteorological days (08:00-08:00):
+ * - Day N includes timestamps > 08:00 on day N (i.e., periods starting at 08:00+)
+ * - Timestamp 08:00 belongs to the PREVIOUS day (period 07-08 ended at 08:00)
+ * 
+ * This uses "ski day" logic: a day's snowfall is what fell since the most recent 08:00.
  */
 function calculateTodayFromHourly(hourlyData) {
   if (!hourlyData || hourlyData.length === 0) {
     return null;
   }
   
-  // Get current time and convert to CET timezone
-  const now = new Date();
-  const todayCET = getDateKeyInCET(now);
-  const currentHourCET = getHourInCET(now);
+  // Find the latest data point to determine the "effective" current time
+  const latestDataPoint = hourlyData.reduce((latest, hour) => {
+    if (!hour || !hour.timestamp) return latest;
+    const hourDate = hour.timestamp instanceof Date ? hour.timestamp : new Date(hour.timestamp);
+    if (!latest || hourDate > latest) return hourDate;
+    return latest;
+  }, null);
   
-  // Filter hourly data to only include hours from 8 AM today onwards (in CET)
-  // Ensure we properly handle the timestamp - it might be a Date object or ISO string
-  const todayHours = hourlyData.filter(hour => {
+  if (!latestDataPoint) {
+    return null;
+  }
+  
+  // Determine which "meteorological day" we're in based on latest data
+  // SMHI timestamp = end of period, so timestamp 08:00 means period 07-08 just ended
+  // The current "day" starts when timestamp > 08:00
+  const effectiveNow = latestDataPoint;
+  const effectiveHourCET = getHourInCET(effectiveNow);
+  
+  // If latest data timestamp is <= 08:00, we're still in the previous day
+  // (because timestamp 08:00 = period 07-08 which belongs to previous day)
+  let dayStartDate;
+  if (effectiveHourCET <= 8) {
+    // Still in yesterday's meteorological day
+    dayStartDate = new Date(effectiveNow);
+    dayStartDate.setDate(dayStartDate.getDate() - 1);
+  } else {
+    // In today's meteorological day
+    dayStartDate = new Date(effectiveNow);
+  }
+  const dayStartCET = getDateKeyInCET(dayStartDate);
+  
+  // Calculate previous day for fallback
+  const previousDay = new Date(dayStartDate);
+  previousDay.setDate(previousDay.getDate() - 1);
+  const previousDayCET = getDateKeyInCET(previousDay);
+  
+  // Filter hourly data to include hours belonging to the current meteorological day
+  // A timestamp T belongs to day D if: T > 08:00 on day D
+  // (because timestamp T represents period T-1 to T, and we want periods starting >= 08:00)
+  const relevantHours = hourlyData.filter(hour => {
     if (!hour || !hour.timestamp) {
       return false;
     }
     
-    // Ensure we have a proper Date object
     let hourDate;
     if (hour.timestamp instanceof Date) {
       hourDate = hour.timestamp;
@@ -388,24 +463,35 @@ function calculateTodayFromHourly(hourlyData) {
       return false;
     }
     
-    // Check if the date is valid
     if (isNaN(hourDate.getTime())) {
       return false;
     }
     
-    // Convert to CET timezone for comparison
     const hourDateCET = getDateKeyInCET(hourDate);
     const hourHourCET = getHourInCET(hourDate);
     
-    // Include if it's today (in CET) and hour is >= 8 (in CET)
-    const isToday = hourDateCET === todayCET;
-    const isAfter8 = hourHourCET >= 8;
+    // Include if timestamp > 08:00 on dayStartCET
+    // (timestamp 09:00 = period 08-09, timestamp 10:00 = period 09-10, etc.)
+    if (hourDateCET === dayStartCET && hourHourCET > 8) {
+      return true;
+    }
     
-    return isToday && isAfter8;
+    // Also include early hours of next day (timestamps 01-08) as they belong to this day
+    // Next day's timestamp 01:00 = period 00-01 which is part of current met day
+    const nextDay = new Date(dayStartDate);
+    nextDay.setDate(nextDay.getDate() + 1);
+    const nextDayCET = getDateKeyInCET(nextDay);
+    if (hourDateCET === nextDayCET && hourHourCET <= 8) {
+      return true;
+    }
+    
+    return false;
   });
   
-  if (todayHours.length === 0) {
-    console.log('No hours found for today since 8 AM. Today CET:', todayCET, 'Current hour CET:', currentHourCET, 'Hourly data range:', {
+  console.log(`calculateTodayFromHourly: dayStartCET=${dayStartCET}, effectiveHour=${effectiveHourCET}, relevantHours=${relevantHours.length}`);
+  
+  if (relevantHours.length === 0) {
+    console.log('No hours found for current met day. dayStartCET:', dayStartCET, 'effectiveHour:', effectiveHourCET, 'Hourly data range:', {
       first: hourlyData[0] ? getDateKeyInCET(new Date(hourlyData[0].timestamp)) + ' ' + getHourInCET(new Date(hourlyData[0].timestamp)) : 'N/A',
       last: hourlyData[hourlyData.length - 1] ? getDateKeyInCET(new Date(hourlyData[hourlyData.length - 1].timestamp)) + ' ' + getHourInCET(new Date(hourlyData[hourlyData.length - 1].timestamp)) : 'N/A'
     });
@@ -413,7 +499,7 @@ function calculateTodayFromHourly(hourlyData) {
   }
   
   // Check if it rained (any hour with negative amount or slr === -1)
-  const hasRain = todayHours.some(hour => hour.snowfall < 0);
+  const hasRain = relevantHours.some(hour => hour.snowfall < 0);
   
   // If it rained, return -1, -1
   if (hasRain) {
@@ -421,13 +507,13 @@ function calculateTodayFromHourly(hourlyData) {
   }
   
   // Sum snowfall amounts (filter out -1 values)
-  const totalSnowfall = todayHours.reduce((sum, hour) => {
+  const totalSnowfall = relevantHours.reduce((sum, hour) => {
     const amount = hour.snowfall || 0;
     return amount >= 0 ? sum + amount : sum;
   }, 0);
   
   // Average SLR (only for hours with snowfall > 0)
-  const hoursWithSnow = todayHours.filter(hour => hour.snowfall > 0);
+  const hoursWithSnow = relevantHours.filter(hour => hour.snowfall > 0);
   if (hoursWithSnow.length === 0) {
     return { snowfall: totalSnowfall, slr: 0 };
   }
@@ -658,10 +744,14 @@ function renderHourlyChart(data) {
   
   const ctx = document.getElementById('hourlyChart').getContext('2d');
   
+  // SMHI timestamps represent END of observation period
+  // So timestamp 08:00 = data for period 07:00-08:00
+  // We show the START hour (timestamp - 1 hour) as the label
   const hours = data.map(d => {
     const date = new Date(d.timestamp);
-    // Formatera som 'kl 08' etc.
-    return date.toLocaleString('sv-SE', { timeZone: 'Europe/Stockholm', hour: '2-digit', hourCycle: 'h23' });
+    const startHour = new Date(date);
+    startHour.setHours(startHour.getHours() - 1);
+    return startHour.toLocaleString('sv-SE', { timeZone: 'Europe/Stockholm', hour: '2-digit', hourCycle: 'h23' });
   });
   
   const snowfall = data.map(d => d.snowfall);
@@ -718,24 +808,25 @@ function renderHourlyChart(data) {
                 intersect: false,
                 callbacks: {
                     title: (context) => {
-                        // Visa timintervallet (t.ex. "10-11" istället för bara "10")
+                        // Visa timintervallet (t.ex. "07-08" för timestamp 08:00)
+                        // SMHI timestamps = END of period, so we show (timestamp-1) → timestamp
                         const dataIndex = context[0].dataIndex;
                         const hourData = data[dataIndex];
                         if (hourData && hourData.timestamp) {
-                            const date = new Date(hourData.timestamp);
-                            const hour = date.toLocaleString('sv-SE', { 
+                            const endTime = new Date(hourData.timestamp);
+                            const startTime = new Date(endTime);
+                            startTime.setHours(startTime.getHours() - 1);
+                            const startHourStr = startTime.toLocaleString('sv-SE', { 
                                 timeZone: 'Europe/Stockholm', 
                                 hour: '2-digit', 
                                 hourCycle: 'h23' 
                             });
-                            const nextHour = new Date(date);
-                            nextHour.setHours(nextHour.getHours() + 1);
-                            const nextHourStr = nextHour.toLocaleString('sv-SE', { 
+                            const endHourStr = endTime.toLocaleString('sv-SE', { 
                                 timeZone: 'Europe/Stockholm', 
                                 hour: '2-digit', 
                                 hourCycle: 'h23' 
                             });
-                            return `kl ${hour}-${nextHourStr}`;
+                            return `kl ${startHourStr}-${endHourStr}`;
                         }
                         return context[0].label;
                     },
