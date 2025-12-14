@@ -756,6 +756,7 @@ function renderHourlyChart(data) {
   
   const snowfall = data.map(d => d.snowfall);
   const slrValues = data.map(d => d.slr);
+  const temperatures = data.map(d => d.temperature);
   
   // Identify rain hours: hours where snowfall is negative
   const rainHours = new Set();
@@ -786,15 +787,30 @@ function renderHourlyChart(data) {
     type: 'bar',
     data: {
       labels: hours,
-      datasets: [{
-        label: 'Snöfall / Regn',
-        data: snowfall,
-        backgroundColor: colors,
-        borderColor: colors,
-        borderWidth: 1,
-        // Store SLR values and rain hours in custom field for tooltips
-        custom: { slrValues, rainHours }
-      }]
+      datasets: [
+        {
+          label: 'Snöfall / Regn',
+          data: snowfall,
+          backgroundColor: colors,
+          borderColor: colors,
+          borderWidth: 1,
+          yAxisID: 'snow',
+          // Store SLR values and rain hours in custom field for tooltips
+          custom: { slrValues, rainHours }
+        },
+        {
+          type: 'line',
+          label: 'Temperatur',
+          data: temperatures,
+          borderColor: 'rgba(255, 140, 0, 0.9)',
+          backgroundColor: 'transparent',
+          tension: 0.3,
+          pointRadius: 0,
+          borderWidth: 2,
+          fill: false,
+          yAxisID: 'temp'
+        }
+      ]
     },
     options: {
         responsive: true,
@@ -832,7 +848,17 @@ function renderHourlyChart(data) {
                     },
                     label: (context) => {
                         const dataIndex = context.dataIndex;
-                        const { slrValues, rainHours } = context.dataset.custom;
+                        const dataset = context.dataset;
+                        
+                        // Temperature line
+                        if (dataset.yAxisID === 'temp') {
+                            const temp = context.parsed.y;
+                            if (temp === null) return null;
+                            return `Temperatur: ${temp.toFixed(1)}°C`;
+                        }
+                        
+                        // Snowfall bars
+                        const { slrValues, rainHours } = dataset.custom;
                         
                         if (rainHours.has(dataIndex)) {
                             // Rain hour - show rain message
@@ -872,12 +898,25 @@ function renderHourlyChart(data) {
                     display: false
                 }
             },
-            y: {
+            snow: {
+                type: 'linear',
+                position: 'left',
                 title: {
                     display: true,
                     text: 'Snöfall (cm)'
                 },
                 beginAtZero: false // Allow negative values for rain
+            },
+            temp: {
+                type: 'linear',
+                position: 'right',
+                title: {
+                    display: true,
+                    text: 'Temperatur (°C)'
+                },
+                grid: {
+                    drawOnChartArea: false
+                }
             }
         }
     }
