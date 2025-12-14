@@ -802,7 +802,23 @@ function renderHourlyChart(data) {
           type: 'line',
           label: 'Temperatur',
           data: temperatures,
-          borderColor: 'rgba(255, 140, 0, 0.9)',
+          borderColor: (ctx) => {
+            // Color based on temperature value
+            const value = ctx.raw;
+            if (value === null || value === undefined) return 'rgba(150, 150, 150, 0.5)';
+            return value >= 0 ? 'rgba(255, 99, 71, 1)' : 'rgba(100, 180, 255, 1)';
+          },
+          segment: {
+            borderColor: (ctx) => {
+              // Color each segment based on average of the two points
+              const p0 = ctx.p0.parsed.y;
+              const p1 = ctx.p1.parsed.y;
+              if (p0 === null || p1 === null) return 'rgba(150, 150, 150, 0.5)';
+              // If crossing zero, use a blend or pick based on midpoint
+              const avg = (p0 + p1) / 2;
+              return avg >= 0 ? 'rgba(255, 99, 71, 1)' : 'rgba(100, 180, 255, 1)';
+            }
+          },
           backgroundColor: 'transparent',
           tension: 0.3,
           pointRadius: 0,
