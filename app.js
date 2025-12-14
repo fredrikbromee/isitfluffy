@@ -782,6 +782,55 @@ function renderHourlyChart(data) {
   if (chartTitleElement && chartTitleElement.classList.contains('chart-title')) {
     chartTitleElement.textContent = `Senaste 24 timmarna: ${totalSnowfall.toFixed(1)} cm`;
   }
+
+  // Cache for temperature gradient
+  let cachedTempGradient = null;
+  let lastChartArea = null;
+  
+  // Function to create temperature gradient based on 0°C position
+  const getOrCreateTempGradient = (chart) => {
+    const { ctx, chartArea, scales } = chart;
+    
+    // Return cached gradient if chartArea hasn't changed
+    if (cachedTempGradient && lastChartArea && 
+        chartArea && lastChartArea.top === chartArea.top && 
+        lastChartArea.bottom === chartArea.bottom) {
+      return cachedTempGradient;
+    }
+    
+    if (!chartArea || !scales.temp) {
+      // Return a default blue color if chart isn't ready
+      return 'rgba(100, 180, 255, 1)';
+    }
+    
+    const yScale = scales.temp;
+    const zeroPixel = yScale.getPixelForValue(0);
+    const top = chartArea.top;
+    const bottom = chartArea.bottom;
+    const height = bottom - top;
+
+    const halfFade = 10;
+    let stopRed = (zeroPixel - halfFade - top) / height;
+    let stopBlue = (zeroPixel + halfFade - top) / height;
+
+    stopRed = Math.max(0, Math.min(1, stopRed));
+    stopBlue = Math.max(0, Math.min(1, stopBlue));
+
+    const gradient = ctx.createLinearGradient(0, top, 0, bottom);
+    const colorRed = 'rgba(255, 99, 71, 1)';
+    const colorBlue = 'rgba(100, 180, 255, 1)';
+
+    gradient.addColorStop(0, colorRed);
+    gradient.addColorStop(stopRed, colorRed);
+    gradient.addColorStop(stopBlue, colorBlue);
+    gradient.addColorStop(1, colorBlue);
+
+    // Cache the gradient
+    cachedTempGradient = gradient;
+    lastChartArea = { top, bottom };
+
+    return gradient;
+  };
   
   hourlyChartInstance = new Chart(ctx, {
     type: 'bar',
@@ -802,22 +851,9 @@ function renderHourlyChart(data) {
           type: 'line',
           label: 'Temperatur',
           data: temperatures,
-          borderColor: (ctx) => {
-            // Color based on temperature value
-            const value = ctx.raw;
-            if (value === null || value === undefined) return 'rgba(150, 150, 150, 0.5)';
-            return value >= 0 ? 'rgba(255, 99, 71, 1)' : 'rgba(100, 180, 255, 1)';
-          },
-          segment: {
-            borderColor: (ctx) => {
-              // Color each segment based on average of the two points
-              const p0 = ctx.p0.parsed.y;
-              const p1 = ctx.p1.parsed.y;
-              if (p0 === null || p1 === null) return 'rgba(150, 150, 150, 0.5)';
-              // If crossing zero, use a blend or pick based on midpoint
-              const avg = (p0 + p1) / 2;
-              return avg >= 0 ? 'rgba(255, 99, 71, 1)' : 'rgba(100, 180, 255, 1)';
-            }
+          borderColor: function(context) {
+            const chart = context.chart;
+            return getOrCreateTempGradient(chart);
           },
           backgroundColor: 'transparent',
           tension: 0.3,
