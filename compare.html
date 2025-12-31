@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>isitfluffy - 30 års snöhistorik</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="compare.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <h1>❄️ isitfluffy</h1>
+        <p class="subtitle" id="subtitle">30 års snöfall i Klövsjö</p>
+        
+        <div class="page-navigation">
+            <a href="index.html" class="nav-link">← Nuvarande säsong</a>
+            <a href="history.html" class="nav-link">Säsongshistorik →</a>
+        </div>
+
+        <div class="view-toggle" id="viewToggle">
+            <button class="toggle-btn active" data-view="periods">5-årsperioder</button>
+            <button class="toggle-btn" data-view="band">Min/Max/Medel</button>
+        </div>
+
+        <div class="chart-container compare-chart">
+            <canvas id="compareChart"></canvas>
+            <div class="loading">Laddar 30 års data...</div>
+        </div>
+
+        <div class="stats-section" id="statsSection">
+            <h3>Statistik</h3>
+            <div class="stats-grid" id="statsGrid">
+                <!-- Stats will be populated by JS -->
+            </div>
+        </div>
+
+        <div class="legend-section compare-legend">
+            <div class="legend-title">Om visualiseringen</div>
+            <p class="legend-description" id="legendDescription">
+                <strong>5-årsperioder:</strong> Visar medelsnöfall för varje 5-årsperiod. 
+                Den nuvarande säsongen visas som streckad linje för jämförelse.
+            </p>
+            <p class="legend-description">
+                Data från SMHI väderstation i Klövsjö. Säsongen 2017-18 är exkluderad på grund av trasig mätare.
+            </p>
+        </div>
+
+        <div class="attribution">
+            <p>Källdata: <a href="https://www.smhi.se/data" target="_blank" rel="noopener noreferrer">SMHI</a> (Creative Commons Erkännande 4.0 SE)</p>
+            <p>Data har bearbetats och visualiserats av isitfluffy</p>
+            <p style="margin-top: 10px; font-size: 0.9em;">© 2025 Fredrik Bromee - <a href="LICENSE" target="_blank" rel="noopener noreferrer">MIT License</a></p>
+        </div>
+    </div>
+
+    <script src="compare.js"></script>
+</body>
+</html>
+

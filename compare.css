@@ -1,0 +1,179 @@
+/* Compare page specific styles */
+
+.compare-chart {
+    height: 450px !important;
+}
+
+/* View toggle */
+.view-toggle {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    margin-bottom: 20px;
+}
+
+.toggle-btn {
+    padding: 10px 20px;
+    border: 2px solid #667eea;
+    background: white;
+    color: #667eea;
+    font-weight: 600;
+    font-size: 0.9em;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.toggle-btn:hover {
+    background: rgba(102, 126, 234, 0.1);
+}
+
+.toggle-btn.active {
+    background: #667eea;
+    color: white;
+}
+
+@media (max-width: 480px) {
+    .toggle-btn {
+        padding: 8px 14px;
+        font-size: 0.85em;
+    }
+}
+
+@media (min-width: 768px) {
+    .compare-chart {
+        height: 550px !important;
+    }
+}
+
+/* Season highlight box */
+.season-highlight {
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    border-radius: 12px;
+    padding: 16px 20px;
+    margin: 20px 0;
+    border-left: 4px solid #667eea;
+    min-height: 60px;
+}
+
+.highlight-title {
+    font-weight: 600;
+    color: #495057;
+    font-size: 0.95em;
+    margin-bottom: 6px;
+}
+
+.highlight-details {
+    color: #6c757d;
+    font-size: 0.9em;
+    line-height: 1.5;
+}
+
+.highlight-details .season-name {
+    font-weight: 600;
+    color: #2c3e50;
+}
+
+.highlight-details .snow-amount {
+    font-size: 1.1em;
+    font-weight: 700;
+    color: #667eea;
+}
+
+/* Stats section */
+.stats-section {
+    background: #f8f9fa;
+    border-radius: 12px;
+    padding: 20px;
+    margin-top: 25px;
+}
+
+.stats-section h3 {
+    margin: 0 0 16px 0;
+    color: #2c3e50;
+    font-size: 1.1em;
+    font-weight: 600;
+}
+
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+}
+
+@media (min-width: 768px) {
+    .stats-grid {
+        grid-template-columns: repeat(4, 1fr);
+    }
+}
+
+.stat-card {
+    background: white;
+    border-radius: 10px;
+    padding: 14px;
+    text-align: center;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.stat-label {
+    font-size: 0.75em;
+    color: #6c757d;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 6px;
+}
+
+.stat-value {
+    font-size: 1.3em;
+    font-weight: 700;
+    color: #2c3e50;
+}
+
+.stat-value.best {
+    color: #28a745;
+}
+
+.stat-value.worst {
+    color: #dc3545;
+}
+
+.stat-season {
+    font-size: 0.8em;
+    color: #6c757d;
+    margin-top: 4px;
+}
+
+/* Compare legend */
+.compare-legend {
+    margin-top: 25px;
+}
+
+.legend-gradient-container {
+    margin-bottom: 12px;
+}
+
+.legend-gradient-bar {
+    height: 12px;
+    background: linear-gradient(90deg, 
+        rgba(102, 126, 234, 0.15) 0%,
+        rgba(102, 126, 234, 0.35) 25%,
+        rgba(102, 126, 234, 0.55) 50%,
+        rgba(102, 126, 234, 0.75) 75%,
+        rgba(102, 126, 234, 1) 100%
+    );
+    border-radius: 6px;
+}
+
+.legend-gradient-labels {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.75em;
+    color: #6c757d;
+    margin-top: 6px;
+}
+
+/* Current season highlight */
+.current-season-line {
+    stroke-width: 3px !important;
+}
+
