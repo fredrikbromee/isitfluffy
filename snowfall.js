@@ -12,7 +12,7 @@
  * @param {number} hum - Luftfuktighet i % (0-100)
  * @returns {Object} Objekt med snödjup (amount) och fluffighetsfaktor (slr)
  */
-const calculateSnowfall = (temp, mm, wind, hum = 90) => {
+const calculateSnowfall = (temp, mm, wind, hum = 100) => {
   // Fail fast: Ingen nederbörd
   if (!mm || mm <= 0) return { amount: 0, slr: 0 };
 
